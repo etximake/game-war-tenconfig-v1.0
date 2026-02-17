@@ -4,6 +4,9 @@ extends Node2D
 @onready var cam: Camera2D = $Camera2D
 @onready var hud: Label = $UI/HUD
 
+var _hud_visible: bool = true
+
+
 func _ready() -> void:
 	if App.config == null:
 		hud.text = "HUD: missing config"
@@ -14,24 +17,105 @@ func _ready() -> void:
 
 	if world.has_method("start_match"):
 		world.call("start_match")
-		hud.text = "HUD: match started"
 	else:
 		hud.text = "HUD: World.start_match() not found"
 		push_error("Main: World node has no start_match()")
-		
+
 	if world.has_signal("match_ended"):
 		world.match_ended.connect(_on_match_ended)
 
-func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
-	var msg := ""
-	if reason == "last_team_alive":
-		msg = "WIN: Team %d (last team alive)" % winner_team
-	elif reason == "territory_90":
-		msg = "WIN: Team %d (territory %.1f%%)" % [winner_team, territory_ratio * 100.0]
-	else:
-		msg = "WIN: Team %d" % winner_team
+	_hud_visible = true
+	hud.visible = _hud_visible
+	set_process(true)
+	set_process_unhandled_input(true)
 
-	hud.text = msg
+
+func _process(_delta: float) -> void:
+	if _hud_visible:
+		_update_hud_live()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	if not event.pressed or event.echo:
+		return
+
+	match event.keycode:
+		KEY_R:
+			_restart_match()
+		KEY_N:
+			_next_preset()
+		KEY_K:
+			_end_run_now()
+		KEY_H:
+			_toggle_hud()
+
+
+func _restart_match() -> void:
+	if world and world.has_method("start_match"):
+		world.call("start_match")
+
+
+func _next_preset() -> void:
+	if not App.next_preset():
+		return
+	_setup_fixed_camera(App.config)
+	_restart_match()
+
+
+func _end_run_now() -> void:
+	if world and world.has_method("force_end_run"):
+		world.call("force_end_run", "hotkey_k")
+
+
+func _toggle_hud() -> void:
+	_hud_visible = not _hud_visible
+	hud.visible = _hud_visible
+	if _hud_visible:
+		_update_hud_live()
+
+
+func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
+	var result := ""
+	if reason == "last_team_alive":
+		result = "WIN: Team %d (last team alive)" % winner_team
+	elif reason == "territory_90":
+		result = "WIN: Team %d (territory %.1f%%)" % [winner_team, territory_ratio * 100.0]
+	else:
+		result = "WIN: Team %d (%s)" % [winner_team, reason]
+
+	if _hud_visible:
+		hud.text = "%s\n\n%s" % [result, _build_hud_stats_block()]
+
+
+func _build_hud_stats_block() -> String:
+	if App.config == null:
+		return ""
+	if world == null:
+		return ""
+	if not world.has_method("get_alive_marbles_per_team"):
+		return ""
+	if not world.has_method("get_territory_ratio_per_team"):
+		return ""
+
+	var seed: int = int(App.config.rng_seed)
+	var seed_txt: String = "random" if seed == 0 else str(seed)
+	var lines: Array[String] = []
+	lines.append("Seed: %s | Preset: %s" % [seed_txt, App.config.preset_name])
+	lines.append("")
+
+	var alive: Array = world.call("get_alive_marbles_per_team")
+	var ratios: Array = world.call("get_territory_ratio_per_team")
+	var teams: int = min(alive.size(), ratios.size())
+	for t in range(teams):
+		lines.append("Team %d: %5.1f%% | alive %d" % [t, float(ratios[t]) * 100.0, int(alive[t])])
+
+	return "\n".join(lines)
+
+
+func _update_hud_live() -> void:
+	hud.text = _build_hud_stats_block()
 
 
 func _setup_fixed_camera(config: GameConfig) -> void:

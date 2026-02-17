@@ -1,88 +1,141 @@
 extends Resource
 class_name GameConfig
-# GameConfig là một Resource dùng để gom toàn bộ tham số của màn chơi.
-# Ưu điểm: chỉnh trực tiếp trong Inspector, tạo nhiều file .tres cho nhiều “kịch bản” video khác nhau.
 
 # =========================
-# 1) Thiết lập team
+# core
 # =========================
+@export_group("core")
+@export var preset_name: String = "default"
+@export var num_teams: int = 4
+@export var tick_rate: float = 20.0
+@export var win_territory_ratio: float = 0.90
 
-@export var num_teams: int = 1
-# Số lượng team tham gia trong màn chơi.
-# Lưu ý: nên khớp với số màu trong team_colors.
-
+# =========================
+# territory
+# =========================
+@export_group("territory")
+@export var grid_cell_size: int = 16
+@export var grid_width: int = 80
+@export var grid_height: int = 45
 @export var team_colors: Array[Color] = [
 	Color.RED, Color.BLUE, Color.GREEN, Color.WHITE, Color.BLACK, Color.YELLOW
 ]
-# Danh sách màu đại diện cho từng team.
-# Quy ước: team_id = 0 dùng Color.RED, team_id = 1 dùng Color.BLUE, ...
-# Territory và Marble sẽ lấy màu theo team_id này.
-
-@export var marbles_per_team: int = 1
-# Số lượng marble spawn ban đầu cho mỗi team.
-# Tổng số marble = num_teams * marbles_per_team.
 
 # =========================
-# 2) Chỉ số Marble (đúng theo luật)
+# marble
 # =========================
-
+@export_group("marble")
 @export var move_speed: float = 240.0
-# Vận tốc tối đa khi marble di chuyển (giới hạn tốc độ).
-# Marble tự động di chuyển, không có input người chơi.
-
 @export var weapon_rotate_speed: float = 5.0
-# Tốc độ quay của vũ khí quanh tâm core.
-# Thường dùng đơn vị radian/giây nếu bạn cộng trực tiếp vào rotation.
-
 @export var initial_size_scale: float = 0.5
-# Hệ số kích thước ban đầu của marble.
-# size_scale ảnh hưởng trực tiếp:
-# - kích thước core (collision shape / sprite)
-# - khoảng cách vũ khí quay quanh tâm và phạm vi đánh
-
 @export var growth_step: float = 0.08
-# Mỗi lần marble “kill” (chạm vũ khí vào core khác team):
-# attacker.size_scale += growth_step
-# Đồng thời kill_count của attacker + 1 (kill_count là biến runtime, không nằm trong config)
-
 @export var max_size_scale: float = 2.2
-# Giới hạn trên của size_scale.
-# Khi tăng size phải clamp để không vượt quá max_size_scale.
-
 @export var capture_radius: float = 72.0
-# Bán kính chiếm lãnh thổ của mỗi marble (tính theo world units/pixel).
-# Mỗi tick simulation: toàn bộ cell trong bán kính này đổi owner_team theo team của marble.
 
 # =========================
-# 3) Territory Grid (lưới lãnh thổ)
+# spawn
 # =========================
-
-@export var grid_cell_size: int = 16
-# Kích thước mỗi ô vuông của lưới (pixel).
-# Ví dụ 16 nghĩa là mỗi cell là hình vuông 16x16.
-
-@export var grid_width: int = 80
-# Số lượng ô theo chiều ngang (X).
-# Tổng chiều rộng world của map ~ grid_width * grid_cell_size.
-
-@export var grid_height: int = 45
-# Số lượng ô theo chiều dọc (Y).
-# Tổng chiều cao world của map ~ grid_height * grid_cell_size.
+@export_group("spawn")
+@export var marbles_per_team: int = 1
+@export var spawn_jitter_cells: float = 2.0
+@export var giant_spawn_team_mode: String = "neutral" # neutral|random|underdog
+@export var preset_skins: Array[MarbleSkin] = []
 
 # =========================
-# 4) Tham số simulation / kết thúc trận
+# rules_10
+# Mỗi rule có cấu trúc chuẩn: enabled, period_sec, strength, cap, chance.
 # =========================
+@export_group("rules_10")
 
-@export var tick_rate: float = 20.0
-# Tần suất tick logic của simulation (lần/giây).
-# Dùng cho các tác vụ “theo tick” như:
-# - chiếm lãnh thổ (capture)
-# - kiểm tra điều kiện thắng
-# Mục tiêu: ổn định, dễ kiểm soát (không phụ thuộc quá nhiều vào FPS).
+# 1) Speed ramp
+@export var rule_1_enabled: bool = true
+@export var rule_1_period_sec: float = 30.0
+@export var rule_1_strength: float = 0.10
+@export var rule_1_cap: float = 3.0
+@export var rule_1_chance: float = 1.0
 
-@export var win_territory_ratio: float = 0.90
-# Ngưỡng thắng theo lãnh thổ: nếu một team chiếm >= 90% tổng số ô thì thắng.
+# 2) Shrink map
+@export var rule_2_enabled: bool = true
+@export var rule_2_period_sec: float = 45.0
+@export var rule_2_strength: float = 1.0
+@export var rule_2_cap: float = 999.0
+@export var rule_2_chance: float = 1.0
 
-@export var rng_seed: int = 12345
-# Seed cho random để tái hiện đúng một trận đấu (phục vụ quay video).
-# Nếu bạn set seed cố định, spawn/hướng ngẫu nhiên sẽ lặp lại theo cùng một kịch bản.
+# 3) Giant spawn
+@export var rule_3_enabled: bool = true
+@export var rule_3_period_sec: float = 120.0
+@export var rule_3_strength: float = 2.0
+@export var rule_3_cap: float = 1.0
+@export var rule_3_chance: float = 1.0
+
+# 4) Death explosion recolor
+@export var rule_4_enabled: bool = true
+@export var rule_4_period_sec: float = 0.0
+@export var rule_4_strength: float = 1.0
+@export var rule_4_cap: float = 999.0
+@export var rule_4_chance: float = 1.0
+
+# 5) Milestone spawn
+@export var rule_5_enabled: bool = true
+@export var rule_5_period_sec: float = 5.0
+@export var rule_5_strength: float = 0.10
+@export var rule_5_cap: float = 6.0
+@export var rule_5_chance: float = 1.0
+
+# 6) Underdog buff
+@export var rule_6_enabled: bool = true
+@export var rule_6_period_sec: float = 30.0
+@export var rule_6_strength: float = 1.20
+@export var rule_6_cap: float = 15.0
+@export var rule_6_chance: float = 1.0
+
+# 7) Burst speed
+@export var rule_7_enabled: bool = true
+@export var rule_7_period_sec: float = 60.0
+@export var rule_7_strength: float = 1.40
+@export var rule_7_cap: float = 10.0
+@export var rule_7_chance: float = 1.0
+
+# 8) Edge decay
+@export var rule_8_enabled: bool = true
+@export var rule_8_period_sec: float = 20.0
+@export var rule_8_strength: float = 1.0
+@export var rule_8_cap: float = 999.0
+@export var rule_8_chance: float = 1.0
+
+# 9) Finale when 2 teams
+@export var rule_9_enabled: bool = true
+@export var rule_9_period_sec: float = 1.0
+@export var rule_9_strength: float = 1.30
+@export var rule_9_cap: float = 3.0
+@export var rule_9_chance: float = 1.0
+
+# 10) Random events
+@export var rule_10_enabled: bool = true
+@export var rule_10_period_sec: float = 120.0
+@export var rule_10_strength: float = 1.0
+@export var rule_10_cap: float = 999.0
+@export var rule_10_chance: float = 1.0
+
+# =========================
+# fx
+# =========================
+@export_group("fx")
+@export var explosion_force: float = 400.0
+@export var explosion_radius_cells: int = 3
+@export var kill_sfx_volume_db: float = -6.0
+
+# =========================
+# ui
+# =========================
+@export_group("ui")
+@export var show_hud_by_default: bool = true
+@export var hud_compact_mode: bool = true
+
+# =========================
+# seed
+# rng_seed = 0  -> randomize mỗi run
+# rng_seed != 0 -> replay đúng trận
+# =========================
+@export_group("seed")
+@export var rng_seed: int = 0

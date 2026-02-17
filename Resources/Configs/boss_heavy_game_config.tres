@@ -4,12 +4,14 @@
 
 [resource]
 script = ExtResource("1_gameconfig")
-preset_name = "default"
+preset_name = "boss-heavy"
 num_teams = 4
-marbles_per_team = 2
-move_speed = 160.0
-initial_size_scale = 0.4
-grid_cell_size = 24
-win_territory_ratio = 1.0
+marbles_per_team = 1
+move_speed = 170.0
+initial_size_scale = 0.5
+rule_3_enabled = true
+rule_3_period_sec = 90.0
+rule_3_strength = 2.8
+rule_3_cap = 2.0
 rng_seed = 0
 metadata/_custom_type_script = "res://Scripts/Systems/game_config.gd"

@@ -4,12 +4,14 @@
 
 [resource]
 script = ExtResource("1_gameconfig")
-preset_name = "default"
-num_teams = 4
-marbles_per_team = 2
-move_speed = 160.0
-initial_size_scale = 0.4
-grid_cell_size = 24
-win_territory_ratio = 1.0
+preset_name = "chaos"
+num_teams = 6
+marbles_per_team = 3
+move_speed = 210.0
+grid_cell_size = 20
+rule_1_strength = 0.2
+rule_7_period_sec = 35.0
+rule_7_strength = 1.6
+rule_10_period_sec = 75.0
 rng_seed = 0
 metadata/_custom_type_script = "res://Scripts/Systems/game_config.gd"

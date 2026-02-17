@@ -66,7 +66,7 @@ func get_owner_cell(x: int, y: int) -> int:
 	return owners[idx]
 
 
-func set_owner_cell(x: int, y: int, team: int, redraw: bool = true) -> void:
+func set_owner_cell(x: int, y: int, team: int, redraw: bool = false) -> void:
 	if config == null:
 		return
 	var w: int = int(config.grid_width)
@@ -104,6 +104,21 @@ func set_owner_cells_batch(cells: Array[Vector2i], team: int) -> void:
 			continue
 
 		owners[idx] = team
+		changed = true
+
+	if changed:
+		queue_redraw()
+
+
+func fill_all(team: int) -> void:
+	if config == null:
+		return
+
+	var changed: bool = false
+	for i in range(owners.size()):
+		if owners[i] == team:
+			continue
+		owners[i] = team
 		changed = true
 
 	if changed:

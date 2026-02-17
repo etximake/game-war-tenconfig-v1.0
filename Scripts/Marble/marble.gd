@@ -10,6 +10,9 @@ var move_speed: float = 320.0
 var weapon_rotate_speed: float = 8.0
 var kill_count: int = 0
 
+var _base_move_speed: float = 320.0
+var _base_weapon_rotate_speed: float = 8.0
+
 # ===== Simulation gate (intro mode) =====
 static var SIM_RUNNING: bool = false   # tất cả marble dùng chung
 
@@ -113,6 +116,7 @@ func _ready() -> void:
 	set_process_unhandled_input(true)
 
 	_cache_base_from_scene_once()
+	set_base_speeds(move_speed, weapon_rotate_speed)
 	_apply_no_tint_visuals()
 	apply_size_scale()
 
@@ -301,6 +305,20 @@ func set_team(new_team: int) -> void:
 	team_id = new_team
 	emit_signal("team_changed", self, new_team)
 
+
+
+
+func set_base_speeds(base_move: float, base_rotate: float) -> void:
+	_base_move_speed = max(base_move, 0.0)
+	_base_weapon_rotate_speed = max(base_rotate, 0.0)
+	move_speed = _base_move_speed
+	weapon_rotate_speed = _base_weapon_rotate_speed
+
+
+func apply_speed_mult(mult: float) -> void:
+	var m: float = max(mult, 0.01)
+	move_speed = _base_move_speed * m
+	weapon_rotate_speed = _base_weapon_rotate_speed * m
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if not SIM_RUNNING:
