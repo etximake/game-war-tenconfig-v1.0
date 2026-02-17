@@ -52,6 +52,16 @@ func cell_to_world(cell: Vector2i) -> Vector2:
 	return Vector2(float(cell.x) * cs, float(cell.y) * cs)
 
 
+func get_world_rect() -> Rect2:
+	if config == null:
+		return Rect2()
+	var cs: float = float(config.grid_cell_size)
+	return Rect2(
+		Vector2.ZERO,
+		Vector2(float(config.grid_width) * cs, float(config.grid_height) * cs)
+	)
+
+
 # =========================
 # Owner accessors
 # =========================

@@ -310,6 +310,45 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		return
 
 	var v := _desired_velocity
+
+	# tránh kẹt ở mép map: nếu body vượt ra ngoài world rect thì kéo về trong map ngay
+	if territory != null and territory.has_method("get_world_rect"):
+		var world_rect: Rect2 = territory.call("get_world_rect")
+		var pos0: Vector2 = state.transform.origin
+		var radius: float = _get_core_radius_world()
+		var min_x: float = world_rect.position.x + radius
+		var max_x: float = world_rect.position.x + world_rect.size.x - radius
+		var min_y: float = world_rect.position.y + radius
+		var max_y: float = world_rect.position.y + world_rect.size.y - radius
+
+		var clamped := Vector2(
+			clampf(pos0.x, min_x, max_x),
+			clampf(pos0.y, min_y, max_y)
+		)
+
+		if clamped != pos0:
+			state.transform = Transform2D(state.transform.get_rotation(), clamped)
+			_last_safe_pos = clamped
+			_has_safe_pos = true
+
+			# bật ngược vận tốc theo pháp tuyến mép để không rít/kẹt ở biên
+			var edge_normal := (pos0 - clamped)
+			if edge_normal.length() < 0.001:
+				edge_normal = -v
+			if edge_normal.length() < 0.001:
+				edge_normal = Vector2.RIGHT
+			edge_normal = edge_normal.normalized()
+
+			if v.length() < 0.001:
+				v = (-edge_normal) * territory_push_speed
+			else:
+				v = v.bounce(edge_normal) * territory_bounce_factor
+
+			if v.length() > 0.001:
+				base_dir = v.normalized()
+				_move_dir = base_dir
+				_wall_cooldown = 0.25
+
 	# --- Territory block: core vào lãnh thổ team khác thì bật lại ---
 	if territory_block_enabled and territory != null and territory.has_method("world_to_cell") and territory.has_method("get_owner_cell"):
 		var pos: Vector2 = state.transform.origin
@@ -497,6 +536,9 @@ func _compute_bias_dir() -> Vector2:
 			var cy := cell.y + dy
 
 			var cell_owner: int = int(territory.call("get_owner_cell", cx, cy))
+			# bỏ qua cell out-of-bounds để không bias marble lao ra ngoài map
+			if cell_owner < -1:
+				continue
 			if cell_owner != team_id:
 				var world_pos: Vector2 = territory.call("cell_to_world", Vector2i(cx, cy))
 				var cs: float = float(App.config.grid_cell_size) if App.config != null else 16.0
@@ -510,3 +552,9 @@ func _compute_bias_dir() -> Vector2:
 	if count == 0:
 		return Vector2.ZERO
 	return sum.normalized()
+
+
+func _get_core_radius_world() -> float:
+	if core_shape != null and core_shape.shape is CircleShape2D:
+		return max(1.0, (core_shape.shape as CircleShape2D).radius)
+	return max(1.0, _base_core_radius * max(size_scale, 0.1))
