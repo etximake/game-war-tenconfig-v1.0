@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=2 format=3 uid="uid://dgncq3vkxlpfe"]
+
+[ext_resource type="Script" uid="uid://colug3a3offek" path="res://Scripts/Systems/game_config.gd" id="1_5pde7"]
+
+[resource]
+script = ExtResource("1_5pde7")
+num_teams = 4
+marbles_per_team = 2
+move_speed = 160.0
+initial_size_scale = 0.4
+capture_radius = 70.0
+grid_cell_size = 24
+win_territory_ratio = 100.0
+metadata/_custom_type_script = "uid://colug3a3offek"

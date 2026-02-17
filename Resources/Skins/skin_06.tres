@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://mcljkb52vnwj"]
+
+[ext_resource type="Texture2D" uid="uid://cfcqmaknkenow" path="res://Assets/Flag/Colorado_round.png" id="1_qq6ix"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="1_qs2y0"]
+[ext_resource type="Texture2D" uid="uid://cchhekthxvv1n" path="res://Assets/Weapon/Iicon_32_21.png" id="3_w1a5x"]
+
+[resource]
+script = ExtResource("1_qs2y0")
+skin_name = "Colorado"
+core_texture = ExtResource("1_qq6ix")
+weapon_texture = ExtResource("3_w1a5x")
+metadata/_custom_type_script = "uid://c402lff57jg35"

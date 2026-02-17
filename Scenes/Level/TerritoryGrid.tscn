@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://cx6an0y3csyml"]
+
+[ext_resource type="Script" uid="uid://xal28e4o8dyx" path="res://Scripts/Level/territory_grid.gd" id="1_enuth"]
+
+[node name="TerritoryGrid" type="Node2D"]
+script = ExtResource("1_enuth")
+grid_line_alpha = 0.5
