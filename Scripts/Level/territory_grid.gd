@@ -110,6 +110,23 @@ func set_owner_cells_batch(cells: Array[Vector2i], team: int) -> void:
 		queue_redraw()
 
 
+func fill_all(team: int) -> void:
+	if config == null:
+		return
+	if owners.is_empty():
+		return
+
+	var changed: bool = false
+	for i in range(owners.size()):
+		if owners[i] == team:
+			continue
+		owners[i] = team
+		changed = true
+
+	if changed:
+		queue_redraw()
+
+
 # =========================
 # Draw
 # =========================

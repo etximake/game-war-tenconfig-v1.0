@@ -4,6 +4,8 @@ extends Node2D
 @onready var cam: Camera2D = $Camera2D
 @onready var hud: Label = $UI/HUD
 
+var _hud_timer: float = 0.0
+
 func _ready() -> void:
 	if App.config == null:
 		hud.text = "HUD: missing config"
@@ -11,16 +13,86 @@ func _ready() -> void:
 		return
 
 	_setup_fixed_camera(App.config)
+	hud.visible = bool(App.config.show_hud)
+	set_process_unhandled_input(true)
 
 	if world.has_method("start_match"):
 		world.call("start_match")
-		hud.text = "HUD: match started"
 	else:
 		hud.text = "HUD: World.start_match() not found"
 		push_error("Main: World node has no start_match()")
-		
+
 	if world.has_signal("match_ended"):
 		world.match_ended.connect(_on_match_ended)
+
+	_update_hud()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	if not event.pressed or event.echo:
+		return
+
+	match event.keycode:
+		KEY_R:
+			_restart_match()
+		KEY_N:
+			_next_preset()
+		KEY_K:
+			_end_run_now()
+		KEY_H:
+			hud.visible = not hud.visible
+
+
+func _process(delta: float) -> void:
+	if App.config == null:
+		return
+	if not hud.visible:
+		return
+	_hud_timer -= delta
+	if _hud_timer > 0.0:
+		return
+	_hud_timer = 1.0 / max(1.0, float(App.config.hud_update_hz))
+	_update_hud()
+
+
+func _restart_match() -> void:
+	if world and world.has_method("start_match"):
+		world.call("start_match")
+
+
+func _next_preset() -> void:
+	if not App.next_preset_config():
+		return
+	_setup_fixed_camera(App.config)
+	hud.visible = bool(App.config.show_hud)
+	_restart_match()
+
+
+func _end_run_now() -> void:
+	if world and world.has_method("force_end_run"):
+		world.call("force_end_run")
+
+
+func _update_hud() -> void:
+	if App.config == null:
+		return
+	if not world:
+		return
+
+	var seed_text: String = "random" if int(App.config.rng_seed) == 0 else str(int(App.config.rng_seed))
+	var lines: Array[String] = []
+	lines.append("Seed: %s | Preset: %s" % [seed_text, App.config.preset_name])
+
+	if world.has_method("get_territory_ratio_per_team") and world.has_method("get_alive_marbles_per_team"):
+		var ratios: Array = world.call("get_territory_ratio_per_team")
+		var alive: Array = world.call("get_alive_marbles_per_team")
+		for t in range(min(ratios.size(), alive.size())):
+			lines.append("T%d: %5.1f%% | %d marbles" % [t, float(ratios[t]) * 100.0, int(alive[t])])
+
+	hud.text = "\n".join(lines)
+
 
 func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
 	var msg := ""
@@ -31,7 +103,8 @@ func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -
 	else:
 		msg = "WIN: Team %d" % winner_team
 
-	hud.text = msg
+	_update_hud()
+	hud.text += "\n" + msg
 
 
 func _setup_fixed_camera(config: GameConfig) -> void:
