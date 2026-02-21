@@ -8,7 +8,7 @@ class_name GameConfig
 @export var preset_name: String = "default"
 @export var num_teams: int = 4
 @export var tick_rate: float = 20.0
-@export var win_territory_ratio: float = 0.90
+@export var win_territory_ratio: float = 0.98
 
 # =========================
 # territory

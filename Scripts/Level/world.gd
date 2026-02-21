@@ -146,7 +146,12 @@ func _on_tick() -> void:
 
 		var cells := _cells_to_paint_for_marble(m)
 		if not cells.is_empty():
-			(paint_map[t] as Array[Vector2i]).append_array(cells)
+			var filtered_cells: Array[Vector2i] = []
+			for c in cells:
+				if _is_inside_play_rect(c):
+					filtered_cells.append(c)
+			if not filtered_cells.is_empty():
+				(paint_map[t] as Array[Vector2i]).append_array(filtered_cells)
 
 	# batch paint theo team, redraw 1 lần/team
 	for t in range(team_count):
@@ -674,6 +679,12 @@ func get_underdog_team() -> int:
 	return min_team
 
 
+func _is_inside_play_rect(c: Vector2i) -> bool:
+	if not _play_rect_valid():
+		return false
+	return c.x >= _play_min_cell.x and c.x <= _play_max_cell.x and c.y >= _play_min_cell.y and c.y <= _play_max_cell.y
+
+
 func _play_rect_valid() -> bool:
 	return _play_max_cell.x >= _play_min_cell.x and _play_max_cell.y >= _play_min_cell.y
 
@@ -707,6 +718,25 @@ func _clamp_marbles_to_play_rect() -> void:
 		if clamped != p:
 			m.global_position = clamped
 			m.linear_velocity *= 0.5
+
+
+func _eliminate_marbles_outside_play_rect() -> void:
+	if not _play_rect_valid() or not is_instance_valid(grid):
+		return
+
+	for i in range(marbles.size() - 1, -1, -1):
+		var m := marbles[i]
+		if not is_instance_valid(m):
+			marbles.remove_at(i)
+			continue
+
+		var c: Vector2i = grid.call("world_to_cell", m.global_position)
+		if not _is_inside_play_rect(c):
+			var id := m.get_instance_id()
+			if _last_tip_cell_by_id.has(id):
+				_last_tip_cell_by_id.erase(id)
+			m.queue_free()
+			marbles.remove_at(i)
 
 
 func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
@@ -785,7 +815,7 @@ func rule_shrink_tick() -> void:
 		return
 
 	_neutralize_outside_play_rect()
-	_clamp_marbles_to_play_rect()
+	_eliminate_marbles_outside_play_rect()
 
 
 func rule_spawn_giant_once() -> void:

@@ -7,10 +7,13 @@
 script = ExtResource("1")
 grid_cell_size = 24
 marbles_per_team = 2
-rule_1_enabled = false
-rule_2_enabled = false
+rule_2_period_sec = 20.0
 rule_3_enabled = false
 rule_3_strength = 2.0
 rule_4_enabled = false
 rule_5_enabled = false
+rule_6_enabled = false
+rule_7_enabled = false
 rule_8_enabled = false
+rule_9_enabled = false
+rule_10_enabled = false
