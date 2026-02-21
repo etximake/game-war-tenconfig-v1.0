@@ -93,6 +93,15 @@ func start_match() -> void:
 	_apply_speed_all()
 
 
+func _physics_process(_delta: float) -> void:
+	if config == null or not config.rule_2_enabled:
+		return
+	if marbles.is_empty():
+		return
+	_clamp_marbles_to_play_rect()
+
+
+
 func _setup_escalation_director() -> void:
 	if escalation_director and is_instance_valid(escalation_director):
 		escalation_director.queue_free()
@@ -706,17 +715,67 @@ func _clamp_marbles_to_play_rect() -> void:
 	if not _play_rect_valid() or not is_instance_valid(grid):
 		return
 	var cs: float = float(config.grid_cell_size)
-	var min_pos: Vector2 = grid.call("cell_to_world", _play_min_cell) + Vector2(cs * 0.5, cs * 0.5)
-	var max_pos: Vector2 = grid.call("cell_to_world", _play_max_cell) + Vector2(cs * 0.5, cs * 0.5)
+	var hard_min_pos: Vector2 = grid.call("cell_to_world", _play_min_cell) + Vector2(cs * 0.5, cs * 0.5)
+	var hard_max_pos: Vector2 = grid.call("cell_to_world", _play_max_cell) + Vector2(cs * 0.5, cs * 0.5)
+
+	# đặt điểm clamp lệch vào trong một chút để marble thoát góc ổn định,
+	# tránh bị kẹt tại đúng biên shrink do clamp lặp theo frame.
+	var inset: float = max(cs * 0.35, 2.0)
+	var min_pos := hard_min_pos + Vector2(inset, inset)
+	var max_pos := hard_max_pos - Vector2(inset, inset)
+	if min_pos.x > max_pos.x:
+		var mid_x := (hard_min_pos.x + hard_max_pos.x) * 0.5
+		min_pos.x = mid_x
+		max_pos.x = mid_x
+	if min_pos.y > max_pos.y:
+		var mid_y := (hard_min_pos.y + hard_max_pos.y) * 0.5
+		min_pos.y = mid_y
+		max_pos.y = mid_y
+
+	var center_pos := (hard_min_pos + hard_max_pos) * 0.5
+
 
 	for m in marbles:
 		if not is_instance_valid(m):
 			continue
 		var p := m.global_position
 		var clamped := Vector2(clamp(p.x, min_pos.x, max_pos.x), clamp(p.y, min_pos.y, max_pos.y))
-		if clamped != p:
-			m.global_position = clamped
-			m.linear_velocity *= 0.5
+		if clamped == p:
+			continue
+
+		m.global_position = clamped
+
+		var n := Vector2.ZERO
+		if p.x < hard_min_pos.x:
+			n.x += 1.0
+		elif p.x > hard_max_pos.x:
+			n.x -= 1.0
+		if p.y < hard_min_pos.y:
+			n.y += 1.0
+		elif p.y > hard_max_pos.y:
+			n.y -= 1.0
+		if n == Vector2.ZERO:
+			n = (center_pos - clamped)
+		if n == Vector2.ZERO:
+			n = Vector2.RIGHT
+		n = n.normalized()
+
+		var v: Vector2 = m.linear_velocity
+		if v.length() > 0.001 and v.dot(n) <= 0.0:
+			v = v.bounce(n)
+
+		var escape_speed: float = max(float(config.move_speed) * 0.65, 120.0)
+		var target_speed: float = max(v.length(), escape_speed)
+		var inward_speed: float = max(v.dot(n), target_speed * 0.7)
+		var tangent: Vector2 = v - n * v.dot(n)
+		tangent *= 0.25
+		v = n * inward_speed + tangent
+		if v.length() < escape_speed:
+			v = v.normalized() * escape_speed if v.length() > 0.001 else n * escape_speed
+
+		m.linear_velocity = v
+		m.base_dir = v.normalized()
+
 
 
 func _eliminate_marbles_outside_play_rect() -> void:
@@ -814,7 +873,7 @@ func rule_shrink_tick() -> void:
 		return
 
 	_neutralize_outside_play_rect()
-	_eliminate_marbles_outside_play_rect()
+	_clamp_marbles_to_play_rect()
 
 
 func rule_spawn_giant_once() -> void:
