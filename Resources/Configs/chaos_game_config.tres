@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=3 format=3 uid="uid://nvb44xn1f4o7"]
+
+[ext_resource type="Script" uid="uid://colug3a3offek" path="res://Scripts/Systems/game_config.gd" id="1"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="1_7ay5o"]
+
+[resource]
+script = ExtResource("1")
+preset_name = "chaos"
+num_teams = 6
+grid_cell_size = 20
+grid_width = 92
+grid_height = 52
+move_speed = 220.0
+weapon_rotate_speed = 7.0
+marbles_per_team = 3
+rule_1_period_sec = 10.0
+rule_1_strength = 0.12
+rule_7_period_sec = 18.0
+rule_7_strength = 0.9
+rule_10_period_sec = 60.0

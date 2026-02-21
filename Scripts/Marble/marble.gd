@@ -10,6 +10,9 @@ var move_speed: float = 320.0
 var weapon_rotate_speed: float = 8.0
 var kill_count: int = 0
 
+var _base_move_speed: float = 320.0
+var _base_weapon_rotate_speed: float = 8.0
+
 # ===== Simulation gate (intro mode) =====
 static var SIM_RUNNING: bool = false   # tất cả marble dùng chung
 
@@ -103,7 +106,8 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	_last_safe_pos = global_position
 	_has_safe_pos = true
-
+	_base_move_speed = move_speed
+	_base_weapon_rotate_speed = weapon_rotate_speed
 
 	if core_shape and core_shape.shape:
 		core_shape.shape = core_shape.shape.duplicate(true)
@@ -293,6 +297,17 @@ func _on_weapon_area_entered(area: Area2D) -> void:
 	var strength: float = 80.0
 	apply_impulse(dir * strength)
 	other.apply_impulse(-dir * strength)
+
+
+func cache_base_speed() -> void:
+	_base_move_speed = move_speed
+	_base_weapon_rotate_speed = weapon_rotate_speed
+
+
+func apply_speed_mult(mult: float) -> void:
+	var final_mult: float = max(mult, 0.01)
+	move_speed = _base_move_speed * final_mult
+	weapon_rotate_speed = _base_weapon_rotate_speed * final_mult
 
 
 func set_team(new_team: int) -> void:

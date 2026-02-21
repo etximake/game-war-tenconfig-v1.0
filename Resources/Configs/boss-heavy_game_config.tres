@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=3 format=3 uid="uid://d3g5j41w0sqfr"]
+
+[ext_resource type="Script" uid="uid://colug3a3offek" path="res://Scripts/Systems/game_config.gd" id="1"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="1_wb17f"]
+
+[resource]
+script = ExtResource("1")
+preset_name = "boss-heavy"
+initial_size_scale = 0.55
+growth_step = 0.1
+max_size_scale = 2.8
+marbles_per_team = 2
+rule_3_period_sec = 90.0
+rule_3_cap = 2.0
