@@ -162,7 +162,6 @@ func _on_tick() -> void:
 
 	_match_time_sec += tick_timer.wait_time if tick_timer else (1.0 / max(config.tick_rate, 1.0))
 	_update_speed_state_timers()
-	_clamp_marbles_to_play_rect()
 
 	if not _match_over:
 		_check_win_conditions()
