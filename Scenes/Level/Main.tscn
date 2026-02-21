@@ -13,6 +13,7 @@
 script = ExtResource("1_6lraq")
 
 [node name="World" type="Node2D" parent="."]
+texture_filter = 1
 script = ExtResource("1_isv4o")
 available_skins = Array[ExtResource("3_htilh")]([ExtResource("7_de806"), ExtResource("4_61cyj"), ExtResource("5_nctrm"), ExtResource("6_ek4ha"), ExtResource("7_de806"), ExtResource("8_5ymhi")])
 

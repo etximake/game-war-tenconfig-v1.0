@@ -5,12 +5,14 @@
 
 [resource]
 script = ExtResource("1")
+team_colors = Array[Color]([Color(1, 0, 0, 1), Color(0, 1, 0, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 0.5, 0, 1)])
 grid_cell_size = 24
-marbles_per_team = 2
+rule_1_enabled = false
+rule_2_enabled = false
 rule_3_enabled = false
-rule_3_strength = 2.0
+rule_3_size_mult = 0.5
 rule_4_enabled = false
-rule_5_enabled = false
+rule_5_period_sec = 30.0
 rule_6_enabled = false
 rule_7_enabled = false
 rule_8_enabled = false
