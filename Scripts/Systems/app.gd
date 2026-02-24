@@ -2,10 +2,7 @@ extends Node
 
 @export var config_path: String = "res://Resources/Configs/default_game_config.tres"
 @export var preset_config_paths: Array[String] = [
-	"res://Resources/Configs/default_game_config.tres",
-	"res://Resources/Configs/chaos_game_config.tres",
-	"res://Resources/Configs/comeback_game_config.tres",
-	"res://Resources/Configs/boss-heavy_game_config.tres"
+	"res://Resources/Configs/default_game_config.tres"
 ]
 
 var config: GameConfig

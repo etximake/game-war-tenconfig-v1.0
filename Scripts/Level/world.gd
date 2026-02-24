@@ -41,6 +41,8 @@ var _play_max_cell: Vector2i = Vector2i.ZERO
 var _edge_decay_ring: int = 0
 var _milestone_count_by_team: Dictionary = {}
 var _extra_spawned_by_team: Dictionary = {}
+var _speed_rain_zones: Array[Dictionary] = []
+var _mini_swarm_ids: Dictionary = {}
 
 
 func start_match() -> void:
@@ -94,11 +96,11 @@ func start_match() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if config == null or not config.rule_2_enabled:
+	if config == null:
 		return
-	if marbles.is_empty():
+	if marbles.is_empty() and _speed_rain_zones.is_empty():
 		return
-	_clamp_marbles_to_play_rect()
+	_update_speed_rain(_delta)
 
 
 
@@ -174,6 +176,19 @@ func _on_tick() -> void:
 
 	if not _match_over:
 		_check_win_conditions()
+
+
+func _draw() -> void:
+	if config == null:
+		return
+	if _speed_rain_zones.is_empty():
+		return
+	var radius_px: float = float(config.grid_cell_size) * max(float(config.rule_3_zone_radius_cells), 0.5)
+	for zone in _speed_rain_zones:
+		var p: Vector2 = zone.get("pos", Vector2.ZERO)
+		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_3_zone_ttl_sec), 0.1), 0.25, 1.0)
+		draw_circle(p, radius_px, Color(1.0, 1.0, 0.6, 0.16 * alpha))
+		draw_circle(p, radius_px * 0.45, Color(1.0, 1.0, 0.8, 0.35 * alpha))
 
 	
 func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
@@ -412,6 +427,8 @@ func _clear_previous_match() -> void:
 	_edge_decay_ring = 0
 	_milestone_count_by_team.clear()
 	_extra_spawned_by_team.clear()
+	_speed_rain_zones.clear()
+	_mini_swarm_ids.clear()
 	
 	_last_tip_cell_by_id.clear()
 
@@ -577,7 +594,6 @@ func _on_marble_team_changed(marble: Marble, new_team: int) -> void:
 	if not is_instance_valid(marble):
 		return
 	var safe_team: int = clamp(new_team, 0, team_count - 1)
-	rule_explosion_on_death(marble.global_position, safe_team)
 
 	if available_skins.size() == 0:
 		return
@@ -797,7 +813,7 @@ func _eliminate_marbles_outside_play_rect() -> void:
 			marbles.remove_at(i)
 
 
-func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
+func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mult: float = 1.0, lifetime_sec: float = 0.0, from_center: bool = true) -> void:
 	if team < 0 or team >= team_count:
 		return
 	var regions := _build_regions_in_cells(team_count)
@@ -811,10 +827,16 @@ func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
 
 	var m := MarbleScene.instantiate() as Marble
 	add_child(m)
-	m.position = base_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
+	if from_center:
+		m.position = base_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
+	else:
+		m.position = Vector2(
+			rng.randf_range(0.0, float(config.grid_width) * cs),
+			rng.randf_range(0.0, float(config.grid_height) * cs)
+		)
 	m.team_id = clamp(team, 0, team_count - 1)
-	m.move_speed = float(config.move_speed)
-	m.weapon_rotate_speed = float(config.weapon_rotate_speed)
+	m.move_speed = float(config.move_speed) * max(speed_mult, 0.1)
+	m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(speed_mult, 0.1)
 	m.size_scale = float(config.initial_size_scale) * max(scale_mult, 0.2)
 	m.cache_base_speed()
 	m.territory = grid
@@ -823,6 +845,32 @@ func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
 	m.team_changed.connect(_on_marble_team_changed)
 	marbles.append(m)
 	_apply_speed_all()
+
+	if lifetime_sec > 0.0:
+		var id := m.get_instance_id()
+		_mini_swarm_ids[id] = true
+		var t := get_tree().create_timer(lifetime_sec)
+		t.timeout.connect(func():
+			_remove_marble_if_alive(id)
+		)
+
+
+func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
+	_spawn_custom_marble_for_team(team, scale_mult, 1.0, 0.0, true)
+
+
+func _remove_marble_if_alive(instance_id: int) -> void:
+	for i in range(marbles.size() - 1, -1, -1):
+		var m := marbles[i]
+		if not is_instance_valid(m):
+			marbles.remove_at(i)
+			continue
+		if m.get_instance_id() != instance_id:
+			continue
+		m.queue_free()
+		marbles.remove_at(i)
+		_mini_swarm_ids.erase(instance_id)
+		return
 
 
 func _apply_team_skin_colors_to_grid() -> void:
@@ -843,197 +891,86 @@ func _load_preset_skins_from_config() -> void:
 		available_skins = config.preset_skins.duplicate()
 
 
-func rule_speed_ramp_tick() -> void:
-	if config == null or not config.rule_1_enabled:
+func _get_non_neutral_fill_ratio() -> float:
+	if not is_instance_valid(grid) or config == null:
+		return 0.0
+	var total: int = max(config.grid_width * config.grid_height, 1)
+	var owned: int = 0
+	for y in range(config.grid_height):
+		for x in range(config.grid_width):
+			if int(grid.call("get_owner_cell", x, y)) >= 0:
+				owned += 1
+	return float(owned) / float(total)
+
+
+func _spawn_speed_rain_zone() -> void:
+	if config == null:
 		return
-	var next_mult: float = global_speed_mult + float(config.rule_1_strength)
-	global_speed_mult = min(next_mult, float(config.rule_1_cap))
-	_apply_speed_all()
-
-
-func rule_shrink_tick() -> void:
-	if config == null or not config.rule_2_enabled:
-		return
-	if not _play_rect_valid():
-		return
-
-	var step_cells: int = max(1, int(round(config.rule_2_strength)))
-	if finale_speed_mult > 1.0:
-		step_cells += 1
-
-	_play_min_cell += Vector2i(step_cells, step_cells)
-	_play_max_cell -= Vector2i(step_cells, step_cells)
-
-	_play_min_cell.x = clamp(_play_min_cell.x, 0, config.grid_width - 1)
-	_play_min_cell.y = clamp(_play_min_cell.y, 0, config.grid_height - 1)
-	_play_max_cell.x = clamp(_play_max_cell.x, 0, config.grid_width - 1)
-	_play_max_cell.y = clamp(_play_max_cell.y, 0, config.grid_height - 1)
-
-	if _play_min_cell.x > _play_max_cell.x or _play_min_cell.y > _play_max_cell.y:
-		return
-
-	_neutralize_outside_play_rect()
-	_clamp_marbles_to_play_rect()
-
-
-func rule_spawn_giant_once() -> void:
-	if config == null or not config.rule_3_enabled:
-		return
-	if _giant_spawned:
-		return
-	_giant_spawned = true
-
-	var mode: int = int(config.rule_3_team_mode)
-	var team: int = 0
-	if mode == 0:
-		team = 0
-	elif mode == 1:
-		team = rng.randi_range(0, team_count - 1)
-	else:
-		team = max(get_underdog_team(), 0)
-
-	_spawn_extra_marble_for_team(team, float(config.rule_3_size_mult))
-
-
-func rule_explosion_on_death(pos: Vector2, attacker_team: int) -> void:
-	if config == null or not config.rule_4_enabled:
-		return
-	if rng.randf() > float(config.rule_4_chance):
-		return
-
-	var radius_cells: int = max(1, int(config.explosion_radius_cells))
 	var cs: float = float(config.grid_cell_size)
-	var radius_px: float = float(radius_cells) * cs
+	var p := Vector2(
+		rng.randf_range(0.0, float(config.grid_width) * cs),
+		rng.randf_range(0.0, float(config.grid_height) * cs)
+	)
+	_speed_rain_zones.append({"pos": p, "ttl": float(config.rule_3_zone_ttl_sec)})
+
+
+func _update_speed_rain(delta: float) -> void:
+	if config == null:
+		return
+	if _speed_rain_zones.is_empty():
+		return
+
+	var zone_radius: float = float(config.grid_cell_size) * max(float(config.rule_3_zone_radius_cells), 0.5)
+	for i in range(_speed_rain_zones.size() - 1, -1, -1):
+		var zone := _speed_rain_zones[i]
+		zone["ttl"] = float(zone.get("ttl", 0.0)) - delta
+		if float(zone["ttl"]) <= 0.0:
+			_speed_rain_zones.remove_at(i)
+			continue
+		_speed_rain_zones[i] = zone
 
 	for m in marbles:
 		if not is_instance_valid(m):
 			continue
-		var d := m.global_position.distance_to(pos)
-		if d <= radius_px and d > 0.001:
-			var dir := (m.global_position - pos).normalized()
-			m.apply_impulse(dir * float(config.explosion_impulse))
+		for zone in _speed_rain_zones:
+			var zp: Vector2 = zone.get("pos", Vector2.ZERO)
+			if m.global_position.distance_to(zp) > zone_radius:
+				continue
+			var dur := rng.randf_range(float(config.rule_3_boost_duration_min_sec), float(config.rule_3_boost_duration_max_sec))
+			m.apply_temp_speed_boost(float(config.rule_3_boost_mult), dur, bool(config.rule_5_enabled), float(config.rule_5_angle_min_deg), float(config.rule_5_angle_max_deg))
+			break
 
-	if not is_instance_valid(grid):
+	queue_redraw()
+
+
+func rule_infinite_spawn_tick() -> void:
+	if config == null or not config.rule_2_enabled:
 		return
-
-	var center: Vector2i = grid.call("world_to_cell", pos)
-	var cells: Array[Vector2i] = []
-	for dy in range(-radius_cells, radius_cells + 1):
-		for dx in range(-radius_cells, radius_cells + 1):
-			var c := Vector2i(center.x + dx, center.y + dy)
-			var wp: Vector2 = grid.call("cell_to_world", c) + Vector2(cs * 0.5, cs * 0.5)
-			if wp.distance_to(pos) <= radius_px:
-				cells.append(c)
-	if cells.is_empty():
+	if _get_non_neutral_fill_ratio() >= float(config.rule_2_stop_fill_ratio):
 		return
-	if config.rule_4_to_neutral:
-		grid.call("set_owner_cells_batch", cells, TerritoryGrid.OWNER_NEUTRAL)
-	else:
-		grid.call("set_owner_cells_batch", cells, clamp(attacker_team, 0, team_count - 1))
+	var team := rng.randi_range(0, team_count - 1)
+	_spawn_custom_marble_for_team(team, float(config.rule_2_small_size_mult), float(config.rule_2_small_speed_mult), 0.0, false)
 
 
-func rule_milestone_spawn_tick() -> void:
-	if config == null or not config.rule_5_enabled:
+func rule_speed_rain_tick() -> void:
+	if config == null or not config.rule_3_enabled:
 		return
-	var ratios := get_territory_ratio_per_team()
-	var step_ratio: float = max(0.01, float(config.rule_5_strength) * 0.01)
-	var cap_extra: int = max(0, int(config.rule_5_cap))
-
-	for team in range(team_count):
-		var reached: int = int(floor(float(ratios[team]) / step_ratio))
-		var spawned: int = int(_extra_spawned_by_team.get(team, 0))
-		if spawned >= cap_extra:
-			continue
-		if reached > int(_milestone_count_by_team.get(team, 0)):
-			_spawn_extra_marble_for_team(team)
-			_extra_spawned_by_team[team] = spawned + 1
-			_milestone_count_by_team[team] = reached
+	var count :float = max(1, int(config.rule_3_zone_count))
+	for i in range(count):
+		_spawn_speed_rain_zone()
+	queue_redraw()
 
 
-func rule_underdog_buff_tick() -> void:
-	if config == null or not config.rule_6_enabled:
+func rule_mini_swarm_tick() -> void:
+	if config == null or not config.rule_4_enabled:
 		return
-	if rng.randf() > float(config.rule_6_chance):
-		return
-	var team: int = get_underdog_team()
-	if team < 0:
-		return
-
-	var buff_strength: float = max(0.0, float(config.rule_6_strength))
-	var buff_mult: float = min(1.0 + buff_strength, float(config.rule_6_cap))
-	team_buff_mult[team] = max(buff_mult, 1.0)
-	team_buff_until_sec[team] = _match_time_sec + max(1.0, float(config.rule_6_period_sec) * 0.75)
-	_apply_speed_all()
-
-
-func rule_burst_tick() -> void:
-	if config == null or not config.rule_7_enabled:
-		return
-	if rng.randf() > float(config.rule_7_chance):
-		return
-	burst_mult = max(1.0, 1.0 + float(config.rule_7_strength))
-	burst_until_sec = _match_time_sec + 10.0
-	_apply_speed_all()
-
-
-func rule_edge_decay_tick() -> void:
-	if config == null or not config.rule_8_enabled:
-		return
-	if not is_instance_valid(grid):
-		return
-
-	if _play_min_cell.x + _edge_decay_ring > _play_max_cell.x - _edge_decay_ring:
-		return
-	if _play_min_cell.y + _edge_decay_ring > _play_max_cell.y - _edge_decay_ring:
-		return
-
-	var min_x := _play_min_cell.x + _edge_decay_ring
-	var max_x := _play_max_cell.x - _edge_decay_ring
-	var min_y := _play_min_cell.y + _edge_decay_ring
-	var max_y := _play_max_cell.y - _edge_decay_ring
-
-	var ring: Array[Vector2i] = []
-	for x in range(min_x, max_x + 1):
-		ring.append(Vector2i(x, min_y))
-		ring.append(Vector2i(x, max_y))
-	for y in range(min_y + 1, max_y):
-		ring.append(Vector2i(min_x, y))
-		ring.append(Vector2i(max_x, y))
-	grid.call("set_owner_cells_batch", ring, TerritoryGrid.OWNER_NEUTRAL)
-	_edge_decay_ring += max(1, int(config.rule_8_strength))
-
-
-func rule_finale_check_tick() -> void:
-	if config == null or not config.rule_9_enabled:
-		return
-	if get_alive_team_count() <= 2:
-		var target_mult: float = min(1.0 + float(config.rule_9_strength), float(config.rule_9_cap))
-		if target_mult != finale_speed_mult:
-			finale_speed_mult = max(target_mult, 1.0)
-			_apply_speed_all()
-		# shrink nhanh hơn ở finale
-		rule_shrink_tick()
-
-
-func _trigger_random_event_once() -> void:
-	var roll: int = rng.randi_range(0, 4)
-	if roll == 0:
-		rule_speed_ramp_tick()
-	elif roll == 1:
-		rule_burst_tick()
-	elif roll == 2:
-		rule_shrink_tick()
-	elif roll == 3:
-		var t := rng.randi_range(0, team_count - 1)
-		_spawn_extra_marble_for_team(t)
-	else:
-		var p := Vector2(rng.randf_range(0.0, float(config.grid_width * config.grid_cell_size)), rng.randf_range(0.0, float(config.grid_height * config.grid_cell_size)))
-		rule_explosion_on_death(p, rng.randi_range(0, team_count - 1))
-
-
-func rule_random_event_tick() -> void:
-	if config == null or not config.rule_10_enabled:
-		return
-	if rng.randf() > float(config.rule_10_chance):
-		return
-	_trigger_random_event_once()
+	var n := rng.randi_range(int(config.rule_4_swarm_count_min), int(config.rule_4_swarm_count_max))
+	for i in range(max(1, n)):
+		var team := rng.randi_range(0, team_count - 1)
+		_spawn_custom_marble_for_team(
+			team,
+			float(config.rule_4_mini_size_mult),
+			float(config.rule_4_mini_speed_mult),
+			float(config.rule_4_mini_lifetime_sec),
+			false
+		)

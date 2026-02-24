@@ -46,82 +46,39 @@ class_name GameConfig
 @export var marbles_per_team: int = 1
 
 # =========================
-# rules_10
-# Cấu trúc chuẩn mỗi rule: enabled, period_sec, strength, cap, chance
+# escalation_rules (4 luật chính thức)
 # =========================
-@export_group("rules_10")
-@export_subgroup("rule_1_speed_ramp")
-@export var rule_1_enabled: bool = true
-@export var rule_1_period_sec: float = 20.0
-@export var rule_1_strength: float = 0.08
-@export var rule_1_cap: float = 2.0
-@export var rule_1_chance: float = 1.0
-
-@export_subgroup("rule_2_shrink_map")
+@export_group("escalation_rules")
+@export_subgroup("rule_2_infinite_spawn_until_full")
 @export var rule_2_enabled: bool = true
-@export var rule_2_period_sec: float = 30.0
-@export var rule_2_strength: float = 1.0
-@export var rule_2_cap: float = 999.0
-@export var rule_2_chance: float = 1.0
+@export var rule_2_period_sec: float = 10.0
+@export var rule_2_small_speed_mult: float = 1.35
+@export var rule_2_small_size_mult: float = 0.7
+@export var rule_2_stop_fill_ratio: float = 0.96
 
-@export_subgroup("rule_3_giant_spawn")
+@export_subgroup("rule_3_speed_rain")
 @export var rule_3_enabled: bool = true
-@export var rule_3_period_sec: float = 180.0
-@export var rule_3_strength: float = 1.0
-@export var rule_3_cap: float = 1.0
-@export var rule_3_chance: float = 1.0
-@export var rule_3_team_mode: int = 2 # 0=neutral, 1=random, 2=underdog
-@export var rule_3_size_mult: float = 2.0
+@export var rule_3_period_sec: float = 6.0
+@export var rule_3_zone_count: int = 6
+@export var rule_3_zone_radius_cells: float = 1.0
+@export var rule_3_boost_mult: float = 1.7
+@export var rule_3_boost_duration_min_sec: float = 2.0
+@export var rule_3_boost_duration_max_sec: float = 3.0
+@export var rule_3_zone_ttl_sec: float = 4.0
 
-@export_subgroup("rule_4_death_explosion_recolor")
+@export_subgroup("rule_4_mini_marble_swarm")
 @export var rule_4_enabled: bool = true
-@export var rule_4_period_sec: float = 0.0
-@export var rule_4_strength: float = 1.0
-@export var rule_4_cap: float = 999.0
-@export var rule_4_chance: float = 1.0
-@export var rule_4_to_neutral: bool = false
+@export var rule_4_period_sec: float = 15.0
+@export var rule_4_swarm_count_min: int = 5
+@export var rule_4_swarm_count_max: int = 10
+@export var rule_4_mini_lifetime_sec: float = 6.0
+@export var rule_4_mini_speed_mult: float = 1.45
+@export var rule_4_mini_size_mult: float = 0.6
 
-@export_subgroup("rule_5_milestone_spawn")
+@export_subgroup("rule_5_random_direction_boost")
 @export var rule_5_enabled: bool = true
-@export var rule_5_period_sec: float = 2.0
-@export var rule_5_strength: float = 10.0
-@export var rule_5_cap: float = 5.0
-@export var rule_5_chance: float = 1.0
-
-@export_subgroup("rule_6_underdog_buff")
-@export var rule_6_enabled: bool = true
-@export var rule_6_period_sec: float = 30.0
-@export var rule_6_strength: float = 0.25
-@export var rule_6_cap: float = 2.0
-@export var rule_6_chance: float = 1.0
-
-@export_subgroup("rule_7_burst_speed")
-@export var rule_7_enabled: bool = true
-@export var rule_7_period_sec: float = 45.0
-@export var rule_7_strength: float = 0.6
-@export var rule_7_cap: float = 10.0
-@export var rule_7_chance: float = 1.0
-
-@export_subgroup("rule_8_edge_decay")
-@export var rule_8_enabled: bool = true
-@export var rule_8_period_sec: float = 8.0
-@export var rule_8_strength: float = 1.0
-@export var rule_8_cap: float = 999.0
-@export var rule_8_chance: float = 1.0
-
-@export_subgroup("rule_9_finale")
-@export var rule_9_enabled: bool = true
-@export var rule_9_period_sec: float = 1.0
-@export var rule_9_strength: float = 0.5
-@export var rule_9_cap: float = 3.0
-@export var rule_9_chance: float = 1.0
-
-@export_subgroup("rule_10_random_events")
-@export var rule_10_enabled: bool = true
-@export var rule_10_period_sec: float = 120.0
-@export var rule_10_strength: float = 1.0
-@export var rule_10_cap: float = 999.0
-@export var rule_10_chance: float = 1.0
+@export var rule_5_angle_min_deg: float = 30.0
+@export var rule_5_angle_max_deg: float = 180.0
 
 # =========================
 # fx

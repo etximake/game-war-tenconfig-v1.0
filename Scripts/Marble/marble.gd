@@ -12,6 +12,9 @@ var kill_count: int = 0
 
 var _base_move_speed: float = 320.0
 var _base_weapon_rotate_speed: float = 8.0
+var _external_speed_mult: float = 1.0
+var _temp_boost_mult: float = 1.0
+var _temp_boost_left_sec: float = 0.0
 
 # ===== Simulation gate (intro mode) =====
 static var SIM_RUNNING: bool = false   # tất cả marble dùng chung
@@ -161,6 +164,11 @@ func _physics_process(delta: float) -> void:
 
 	if _wall_cooldown > 0.0:
 		_wall_cooldown = max(_wall_cooldown - delta, 0.0)
+	if _temp_boost_left_sec > 0.0:
+		_temp_boost_left_sec = max(_temp_boost_left_sec - delta, 0.0)
+		if _temp_boost_left_sec <= 0.0:
+			_temp_boost_mult = 1.0
+			_recompute_speed()
 
 	_update_base_dir(delta)
 
@@ -302,10 +310,38 @@ func _on_weapon_area_entered(area: Area2D) -> void:
 func cache_base_speed() -> void:
 	_base_move_speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
+	_external_speed_mult = 1.0
+	_temp_boost_mult = 1.0
+	_temp_boost_left_sec = 0.0
 
 
 func apply_speed_mult(mult: float) -> void:
-	var final_mult: float = max(mult, 0.01)
+	_external_speed_mult = max(mult, 0.01)
+	_recompute_speed()
+
+
+func apply_temp_speed_boost(mult: float, duration_sec: float, random_direction_boost_enabled: bool, angle_min_deg: float, angle_max_deg: float) -> void:
+	_temp_boost_mult = max(mult, 1.0)
+	_temp_boost_left_sec = max(_temp_boost_left_sec, duration_sec)
+	if random_direction_boost_enabled:
+		_apply_random_direction_offset(angle_min_deg, angle_max_deg)
+	_recompute_speed()
+
+
+func _apply_random_direction_offset(angle_min_deg: float, angle_max_deg: float) -> void:
+	var min_deg: float = angle_min_deg if angle_min_deg <= angle_max_deg else angle_max_deg
+	var max_deg: float = angle_max_deg if angle_max_deg >= angle_min_deg else angle_min_deg
+	var sign := -1.0 if randf() < 0.5 else 1.0
+	var angle := deg_to_rad(randf_range(min_deg, max_deg) * sign)
+	var ref := _move_dir if _move_dir.length() > 0.001 else base_dir
+	if ref.length() <= 0.001:
+		ref = Vector2.RIGHT
+	base_dir = ref.normalized().rotated(angle)
+	_move_dir = base_dir
+
+
+func _recompute_speed() -> void:
+	var final_mult: float = max(_external_speed_mult * _temp_boost_mult, 0.01)
 	move_speed = _base_move_speed * final_mult
 	weapon_rotate_speed = _base_weapon_rotate_speed * final_mult
 
