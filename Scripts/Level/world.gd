@@ -317,28 +317,15 @@ func _end_match(winner_team: int, reason: String, ratio: float) -> void:
 	var preset_name: String = config.preset_name if config != null else "unknown"
 	print("MATCH_RESULT winner=%d reason=%s ratio=%.4f seed=%s duration=%.2fs preset=%s" % [winner_team, reason, ratio, seed_text, _match_time_sec, preset_name])
 
+	if is_instance_valid(grid):
+		grid.call("fill_all", winner_team)
+
 	emit_signal("match_ended", winner_team, reason, ratio)
-	_reset_after_delay()
 
 
 func _reset_after_delay() -> void:
-	var should_loop: bool = config != null and bool(config.auto_loop_enabled)
-	if not should_loop:
-		return
-
-	var loop_delay: float = reset_delay
-	if config != null:
-		loop_delay = max(0.1, float(config.auto_loop_delay_sec))
-
-	var t := Timer.new()
-	t.one_shot = true
-	t.wait_time = loop_delay
-	add_child(t)
-	t.timeout.connect(func():
-		t.queue_free()
-		start_match()
-	)
-	t.start()
+	# Không auto reset: chỉ reset thủ công bằng phím R từ Main.gd
+	return
 
 
 func force_end_run() -> void:
@@ -816,28 +803,26 @@ func _eliminate_marbles_outside_play_rect() -> void:
 func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mult: float = 1.0, lifetime_sec: float = 0.0, from_center: bool = true) -> void:
 	if team < 0 or team >= team_count:
 		return
-	var regions := _build_regions_in_cells(team_count)
-	if team >= regions.size():
+	if not is_instance_valid(grid) or config == null:
 		return
-	var rect: Rect2i = regions[team]
+
 	var cs: float = float(config.grid_cell_size)
-	var cx: int = rect.position.x + int(floor(float(rect.size.x) * 0.5))
-	var cy: int = rect.position.y + int(floor(float(rect.size.y) * 0.5))
-	var base_pos: Vector2 = grid.call("cell_to_world", Vector2i(cx, cy)) + Vector2(cs * 0.5, cs * 0.5)
+	var anchor_pos: Vector2 = _get_team_spawn_anchor(team)
 
 	var m := MarbleScene.instantiate() as Marble
 	add_child(m)
-	if from_center:
-		m.position = base_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
-	else:
-		m.position = Vector2(
-			rng.randf_range(0.0, float(config.grid_width) * cs),
-			rng.randf_range(0.0, float(config.grid_height) * cs)
-		)
+	m.position = anchor_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
+
+	if not from_center:
+		var team_cells: Array[Vector2i] = _get_owned_cells_for_team(team)
+		if not team_cells.is_empty():
+			var pick: Vector2i = team_cells[rng.randi_range(0, team_cells.size() - 1)]
+			m.position = grid.call("cell_to_world", pick) + Vector2(cs * 0.5, cs * 0.5)
+
 	m.team_id = clamp(team, 0, team_count - 1)
 	m.move_speed = float(config.move_speed) * max(speed_mult, 0.1)
 	m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(speed_mult, 0.1)
-	m.size_scale = float(config.initial_size_scale) * max(scale_mult, 0.2)
+	m.size_scale = float(config.initial_size_scale) * clamp(scale_mult, 0.2, 0.85)
 	m.cache_base_speed()
 	m.territory = grid
 	if available_skins.size() > 0:
@@ -853,6 +838,41 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 		t.timeout.connect(func():
 			_remove_marble_if_alive(id)
 		)
+
+
+
+
+func _get_team_spawn_anchor(team: int) -> Vector2:
+	var same_team_marbles: Array[Marble] = []
+	for m in marbles:
+		if not is_instance_valid(m):
+			continue
+		if int(m.team_id) == team:
+			same_team_marbles.append(m)
+	if not same_team_marbles.is_empty():
+		return same_team_marbles[rng.randi_range(0, same_team_marbles.size() - 1)].global_position
+
+	var team_cells: Array[Vector2i] = _get_owned_cells_for_team(team)
+	if not team_cells.is_empty():
+		var pick: Vector2i = team_cells[rng.randi_range(0, team_cells.size() - 1)]
+		var cs: float = float(config.grid_cell_size)
+		return grid.call("cell_to_world", pick) + Vector2(cs * 0.5, cs * 0.5)
+
+	return Vector2(
+		rng.randf_range(0.0, float(config.grid_width) * float(config.grid_cell_size)),
+		rng.randf_range(0.0, float(config.grid_height) * float(config.grid_cell_size))
+	)
+
+
+func _get_owned_cells_for_team(team: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not is_instance_valid(grid) or config == null:
+		return cells
+	for y in range(config.grid_height):
+		for x in range(config.grid_width):
+			if int(grid.call("get_owner_cell", x, y)) == team:
+				cells.append(Vector2i(x, y))
+	return cells
 
 
 func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:

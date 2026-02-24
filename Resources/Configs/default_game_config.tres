@@ -14,5 +14,6 @@ rule_2_small_speed_mult = 1.4
 rule_2_small_size_mult = 0.72
 rule_3_enabled = false
 rule_3_boost_mult = 1.8
-rule_4_mini_size_mult = 0.2
+rule_4_mini_speed_mult = 2.0
+rule_4_mini_size_mult = 0.4
 rule_5_enabled = false
