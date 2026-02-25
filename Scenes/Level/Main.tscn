@@ -1,13 +1,10 @@
-[gd_scene load_steps=9 format=3 uid="uid://d1w7d1dtglwsw"]
+[gd_scene load_steps=6 format=3 uid="uid://d1w7d1dtglwsw"]
 
 [ext_resource type="Script" uid="uid://b4emorq00844p" path="res://Scripts/Level/main.gd" id="1_6lraq"]
 [ext_resource type="Script" uid="uid://dqgr8v8btj2sq" path="res://Scripts/Level/world.gd" id="1_isv4o"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="3_htilh"]
-[ext_resource type="Resource" uid="uid://cewhc5vdwb2e1" path="res://Resources/Skins/skin_01.tres" id="4_61cyj"]
-[ext_resource type="Resource" uid="uid://bi1r4qxtq1tvh" path="res://Resources/Skins/skin_02.tres" id="5_nctrm"]
-[ext_resource type="Resource" uid="uid://mj3tvu48a78m" path="res://Resources/Skins/skin_03.tres" id="6_ek4ha"]
-[ext_resource type="Resource" uid="uid://bqjubh63vncfj" path="res://Resources/Skins/skin_04.tres" id="7_de806"]
-[ext_resource type="Resource" uid="uid://yqk13vglyle1" path="res://Resources/Skins/skin_05.tres" id="8_5ymhi"]
+[ext_resource type="Resource" uid="uid://cewhc5vdwb2e1" path="res://Resources/Skins/Alabama.tres" id="4_htilh"]
+[ext_resource type="Resource" uid="uid://bi1r4qxtq1tvh" path="res://Resources/Skins/Alaska.tres" id="5_61cyj"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_6lraq")
@@ -15,7 +12,7 @@ script = ExtResource("1_6lraq")
 [node name="World" type="Node2D" parent="."]
 texture_filter = 1
 script = ExtResource("1_isv4o")
-available_skins = Array[ExtResource("3_htilh")]([ExtResource("7_de806"), ExtResource("4_61cyj"), ExtResource("5_nctrm"), ExtResource("6_ek4ha"), ExtResource("7_de806"), ExtResource("8_5ymhi")])
+available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_htilh"), ExtResource("5_61cyj")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
 

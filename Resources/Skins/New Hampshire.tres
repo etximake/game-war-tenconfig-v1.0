@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://be1wkflml27lt"]
+
+[ext_resource type="Texture2D" uid="uid://d2l2j4me2paiw" path="res://Assets/Flag/New_Hampshire_round.png" id="1_7qhvd"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_phldf"]
+[ext_resource type="Texture2D" uid="uid://byofmmtpgxarg" path="res://Assets/Weapon/Iicon_32_36.png" id="3_phldf"]
+
+[resource]
+script = ExtResource("2_phldf")
+skin_name = "New Hampshire"
+core_texture = ExtResource("1_7qhvd")
+weapon_texture = ExtResource("3_phldf")
+metadata/_custom_type_script = "uid://c402lff57jg35"

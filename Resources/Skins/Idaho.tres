@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://rkrfsfbcbhbd"]
+
+[ext_resource type="Texture2D" uid="uid://cwb7yr52rtetd" path="res://Assets/Flag/Idaho_round.png" id="1_qa0r0"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_pwgic"]
+[ext_resource type="Texture2D" uid="uid://byofmmtpgxarg" path="res://Assets/Weapon/Iicon_32_36.png" id="3_pwgic"]
+
+[resource]
+script = ExtResource("2_pwgic")
+skin_name = "Idaho"
+core_texture = ExtResource("1_qa0r0")
+weapon_texture = ExtResource("3_pwgic")
+metadata/_custom_type_script = "uid://c402lff57jg35"
