@@ -43,6 +43,7 @@ var _milestone_count_by_team: Dictionary = {}
 var _extra_spawned_by_team: Dictionary = {}
 var _speed_rain_zones: Array[Dictionary] = []
 var _mini_swarm_ids: Dictionary = {}
+var _rule_4_flash_cells: Array[Dictionary] = []
 
 
 func start_match() -> void:
@@ -95,22 +96,18 @@ func start_match() -> void:
 	_setup_escalation_director()
 	_apply_speed_all()
 
-	# Rule 2: spawn sớm 1 marble để escalation nhìn thấy rõ ngay từ đầu run.
-	if bool(config.rule_2_enabled):
-		rule_infinite_spawn_tick()
-
 
 func _physics_process(_delta: float) -> void:
 	if config == null:
 		return
-	if marbles.is_empty() and _speed_rain_zones.is_empty():
+	if marbles.is_empty() and _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
 	_update_speed_rain(_delta)
 
 
 func _process(_delta: float) -> void:
-	# Giữ hiệu ứng blink của Rule 3 luôn animate rõ ràng theo frame.
-	if not _speed_rain_zones.is_empty():
+	# Giữ hiệu ứng blink của Rule 3 + Rule 4 animate rõ ràng theo frame.
+	if not _speed_rain_zones.is_empty() or not _rule_4_flash_cells.is_empty():
 		queue_redraw()
 
 
@@ -192,7 +189,7 @@ func _on_tick() -> void:
 func _draw() -> void:
 	if config == null:
 		return
-	if _speed_rain_zones.is_empty():
+	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
 	var cell_size: float = float(config.grid_cell_size)
 	var blink_strength: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.020)
@@ -203,6 +200,15 @@ func _draw() -> void:
 		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
 		draw_rect(rect, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha), true)
 		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 2.0)
+
+	for flash in _rule_4_flash_cells:
+		var p: Vector2 = flash.get("pos", Vector2.ZERO)
+		var ttl: float = float(flash.get("ttl", 0.0))
+		var max_ttl: float = max(float(flash.get("max_ttl", 0.1)), 0.1)
+		var alpha: float = clamp(ttl / max_ttl, 0.2, 1.0)
+		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
+		draw_rect(rect, Color(1.0, 0.65, 0.10, (0.30 + 0.70 * blink_strength) * alpha), true)
+		draw_rect(rect.grow(2.0), Color(1.0, 1.0, 1.0, (0.35 + 0.60 * blink_strength) * alpha), false, 2.0)
 
 	
 func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
@@ -430,6 +436,7 @@ func _clear_previous_match() -> void:
 	_extra_spawned_by_team.clear()
 	_speed_rain_zones.clear()
 	_mini_swarm_ids.clear()
+	_rule_4_flash_cells.clear()
 	
 	_last_tip_cell_by_id.clear()
 
@@ -826,16 +833,19 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 
 	var cs: float = float(config.grid_cell_size)
 	var anchor_pos: Vector2 = _get_team_spawn_anchor(team)
+	var spawn_marker_pos: Vector2 = anchor_pos
 
 	var m := MarbleScene.instantiate() as Marble
 	add_child(m)
 	m.position = anchor_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
+	spawn_marker_pos = m.position
 
 	if not from_center:
 		var team_cells: Array[Vector2i] = _get_owned_cells_for_team(team)
 		if not team_cells.is_empty():
 			var pick: Vector2i = team_cells[rng.randi_range(0, team_cells.size() - 1)]
 			m.position = grid.call("cell_to_world", pick) + Vector2(cs * 0.5, cs * 0.5)
+			spawn_marker_pos = m.position
 
 	m.team_id = clamp(team, 0, team_count - 1)
 	m.move_speed = float(config.move_speed) * max(speed_mult, 0.1)
@@ -848,6 +858,8 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 	m.team_changed.connect(_on_marble_team_changed)
 	marbles.append(m)
 	_apply_speed_all()
+	if not from_center:
+		_register_rule_4_flash_cell(spawn_marker_pos)
 
 	if lifetime_sec > 0.0:
 		if m.skin_label:
@@ -860,6 +872,20 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 		)
 
 
+
+
+func _register_rule_4_flash_cell(world_pos: Vector2) -> void:
+	if config == null or not is_instance_valid(grid):
+		return
+	if not bool(config.rule_4_enabled):
+		return
+	if not bool(config.rule_3_enabled):
+		return
+
+	var ttl: float = max(float(config.rule_4_flash_cell_ttl_sec), 0.1)
+	var cell: Vector2i = grid.call("world_to_cell", world_pos)
+	var pos: Vector2 = grid.call("cell_to_world", cell) + Vector2(float(config.grid_cell_size) * 0.5, float(config.grid_cell_size) * 0.5)
+	_rule_4_flash_cells.append({"pos": pos, "ttl": ttl, "max_ttl": ttl})
 
 
 func _get_team_spawn_anchor(team: int) -> Vector2:
@@ -953,12 +979,14 @@ func _spawn_speed_rain_zone() -> void:
 	)
 	var p := Vector2((float(cell.x) + 0.5) * cs, (float(cell.y) + 0.5) * cs)
 	_speed_rain_zones.append({"pos": p, "ttl": float(config.rule_3_zone_ttl_sec)})
+	if bool(config.rule_4_enabled):
+		_register_rule_4_flash_cell(p)
 
 
 func _update_speed_rain(delta: float) -> void:
 	if config == null:
 		return
-	if _speed_rain_zones.is_empty():
+	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
 
 	var zone_radius: float = float(config.grid_cell_size) * max(float(config.rule_3_zone_radius_cells), 0.5)
@@ -980,6 +1008,14 @@ func _update_speed_rain(delta: float) -> void:
 			var dur := rng.randf_range(float(config.rule_3_boost_duration_min_sec), float(config.rule_3_boost_duration_max_sec))
 			m.apply_temp_speed_boost(float(config.rule_3_boost_mult), dur, bool(config.rule_3_random_direction_enabled), float(config.rule_3_angle_min_deg), float(config.rule_3_angle_max_deg))
 			break
+
+	for i in range(_rule_4_flash_cells.size() - 1, -1, -1):
+		var flash := _rule_4_flash_cells[i]
+		flash["ttl"] = float(flash.get("ttl", 0.0)) - delta
+		if float(flash["ttl"]) <= 0.0:
+			_rule_4_flash_cells.remove_at(i)
+			continue
+		_rule_4_flash_cells[i] = flash
 
 	queue_redraw()
 
@@ -1038,19 +1074,12 @@ func _normalize_merged_rules() -> void:
 	if config == null:
 		return
 
-	if bool(config.rule_4_enabled):
-		config.rule_2_enabled = bool(config.rule_2_enabled) or bool(config.rule_4_enabled)
-		config.rule_2_swarm_count_min = max(int(config.rule_2_swarm_count_min), int(config.rule_4_swarm_count_min))
-		config.rule_2_swarm_count_max = max(int(config.rule_2_swarm_count_max), int(config.rule_4_swarm_count_max))
-		config.rule_2_spawn_lifetime_sec = max(float(config.rule_2_spawn_lifetime_sec), float(config.rule_4_mini_lifetime_sec))
-		config.rule_2_small_speed_mult = max(float(config.rule_2_small_speed_mult), float(config.rule_4_mini_speed_mult))
-		config.rule_2_small_size_mult = min(float(config.rule_2_small_size_mult), float(config.rule_4_mini_size_mult))
-		config.rule_2_period_sec = min(float(config.rule_2_period_sec), max(float(config.rule_4_period_sec), 0.01))
-
 	config.rule_2_swarm_count_min = max(int(config.rule_2_swarm_count_min), 1)
 	config.rule_2_swarm_count_max = max(int(config.rule_2_swarm_count_max), int(config.rule_2_swarm_count_min))
 	config.rule_2_spawn_lifetime_sec = max(float(config.rule_2_spawn_lifetime_sec), 0.0)
+	config.rule_2_start_delay_sec = max(float(config.rule_2_start_delay_sec), 0.0)
 	config.rule_2_period_sec = max(float(config.rule_2_period_sec), 0.01)
+	config.rule_4_flash_cell_ttl_sec = max(float(config.rule_4_flash_cell_ttl_sec), 0.1)
 	config.rule_2_stop_fill_ratio = clamp(float(config.rule_2_stop_fill_ratio), 0.0, 1.0)
 
 	if bool(config.rule_5_enabled):

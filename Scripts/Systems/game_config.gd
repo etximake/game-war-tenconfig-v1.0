@@ -60,6 +60,7 @@ class_name GameConfig
 @export_group("escalation_rules")
 @export_subgroup("rule_2_spawn_pressure (merged with old rule_4_mini_marble_swarm)")
 @export var rule_2_enabled: bool = true
+@export var rule_2_start_delay_sec: float = 10.0
 @export var rule_2_period_sec: float = 10.0
 @export var rule_2_small_speed_mult: float = 1.35
 @export var rule_2_small_size_mult: float = 0.7
@@ -89,6 +90,7 @@ class_name GameConfig
 @export_storage var rule_4_mini_lifetime_sec: float = 6.0
 @export_storage var rule_4_mini_speed_mult: float = 1.45
 @export_storage var rule_4_mini_size_mult: float = 0.6
+@export_storage var rule_4_flash_cell_ttl_sec: float = 0.9
 @export_storage var rule_5_enabled: bool = true
 @export_storage var rule_5_angle_min_deg: float = 30.0
 @export_storage var rule_5_angle_max_deg: float = 180.0
