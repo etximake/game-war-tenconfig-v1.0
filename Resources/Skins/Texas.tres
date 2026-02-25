@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://bkr3i36qvgu3k"]
+
+[ext_resource type="Texture2D" uid="uid://dx36efyl7puum" path="res://Assets/Flag/Texas_round.png" id="1_dyuvq"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_lv4yy"]
+[ext_resource type="Texture2D" uid="uid://wsgl3ptv52w1" path="res://Assets/Weapon/Iicon_32_32.png" id="3_lv4yy"]
+
+[resource]
+script = ExtResource("2_lv4yy")
+skin_name = "Texas"
+core_texture = ExtResource("1_dyuvq")
+weapon_texture = ExtResource("3_lv4yy")
+metadata/_custom_type_script = "uid://c402lff57jg35"

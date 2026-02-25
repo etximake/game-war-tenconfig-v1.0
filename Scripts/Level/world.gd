@@ -52,6 +52,7 @@ func start_match() -> void:
 	if config == null:
 		push_error("World: App.config is null")
 		return
+	_normalize_merged_rules()
 
 	_match_over = false
 
@@ -94,6 +95,10 @@ func start_match() -> void:
 	_setup_escalation_director()
 	_apply_speed_all()
 
+	# Rule 2: spawn sớm 1 marble để escalation nhìn thấy rõ ngay từ đầu run.
+	if bool(config.rule_2_enabled):
+		rule_infinite_spawn_tick()
+
 
 func _physics_process(_delta: float) -> void:
 	if config == null:
@@ -101,6 +106,12 @@ func _physics_process(_delta: float) -> void:
 	if marbles.is_empty() and _speed_rain_zones.is_empty():
 		return
 	_update_speed_rain(_delta)
+
+
+func _process(_delta: float) -> void:
+	# Giữ hiệu ứng blink của Rule 3 luôn animate rõ ràng theo frame.
+	if not _speed_rain_zones.is_empty():
+		queue_redraw()
 
 
 
@@ -183,12 +194,15 @@ func _draw() -> void:
 		return
 	if _speed_rain_zones.is_empty():
 		return
-	var radius_px: float = float(config.grid_cell_size) * max(float(config.rule_3_zone_radius_cells), 0.5)
+	var cell_size: float = float(config.grid_cell_size)
+	var blink_strength: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.020)
+
 	for zone in _speed_rain_zones:
 		var p: Vector2 = zone.get("pos", Vector2.ZERO)
 		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_3_zone_ttl_sec), 0.1), 0.25, 1.0)
-		draw_circle(p, radius_px, Color(1.0, 1.0, 0.6, 0.16 * alpha))
-		draw_circle(p, radius_px * 0.45, Color(1.0, 1.0, 0.8, 0.35 * alpha))
+		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
+		draw_rect(rect, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha), true)
+		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 2.0)
 
 	
 func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
@@ -517,8 +531,10 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 		var cx: int = rect.position.x + int(floor(float(rect.size.x) * 0.5))
 		var cy: int = rect.position.y + int(floor(float(rect.size.y) * 0.5))
 		var base_pos: Vector2 = grid.call("cell_to_world", Vector2i(cx, cy)) + Vector2(cs * 0.5, cs * 0.5)
+		var count_mult: float = _get_participant_mult(config.participant_team_count_mult, team, 1.0)
+		var team_spawn_count: int = max(1, int(round(float(marbles_per_team) * count_mult)))
 
-		for i in range(marbles_per_team):
+		for i in range(team_spawn_count):
 			var m := MarbleScene.instantiate() as Marble
 			add_child(m)
 
@@ -527,9 +543,11 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 			m.position = base_pos + Vector2(jx, jy)
 
 			m.team_id = clamp(team, 0, team_count - 1)
-			m.move_speed = float(config.move_speed)
-			m.weapon_rotate_speed = float(config.weapon_rotate_speed)
-			m.size_scale = float(config.initial_size_scale)
+			var team_speed_mult: float = _get_participant_mult(config.participant_team_speed_mult, team, 1.0)
+			var team_size_mult: float = _get_participant_mult(config.participant_team_size_mult, team, 1.0)
+			m.move_speed = float(config.move_speed) * max(team_speed_mult, 0.05)
+			m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(team_speed_mult, 0.05)
+			m.size_scale = float(config.initial_size_scale) * clamp(team_size_mult, 0.2, 4.0)
 			m.cache_base_speed()
 
 			m.territory = grid
@@ -832,6 +850,8 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 	_apply_speed_all()
 
 	if lifetime_sec > 0.0:
+		if m.skin_label:
+			m.skin_label.visible = false
 		var id := m.get_instance_id()
 		_mini_swarm_ids[id] = true
 		var t := get_tree().create_timer(lifetime_sec)
@@ -927,10 +947,11 @@ func _spawn_speed_rain_zone() -> void:
 	if config == null:
 		return
 	var cs: float = float(config.grid_cell_size)
-	var p := Vector2(
-		rng.randf_range(0.0, float(config.grid_width) * cs),
-		rng.randf_range(0.0, float(config.grid_height) * cs)
+	var cell := Vector2i(
+		rng.randi_range(0, max(0, int(config.grid_width) - 1)),
+		rng.randi_range(0, max(0, int(config.grid_height) - 1))
 	)
+	var p := Vector2((float(cell.x) + 0.5) * cs, (float(cell.y) + 0.5) * cs)
 	_speed_rain_zones.append({"pos": p, "ttl": float(config.rule_3_zone_ttl_sec)})
 
 
@@ -957,7 +978,7 @@ func _update_speed_rain(delta: float) -> void:
 			if m.global_position.distance_to(zp) > zone_radius:
 				continue
 			var dur := rng.randf_range(float(config.rule_3_boost_duration_min_sec), float(config.rule_3_boost_duration_max_sec))
-			m.apply_temp_speed_boost(float(config.rule_3_boost_mult), dur, bool(config.rule_5_enabled), float(config.rule_5_angle_min_deg), float(config.rule_5_angle_max_deg))
+			m.apply_temp_speed_boost(float(config.rule_3_boost_mult), dur, bool(config.rule_3_random_direction_enabled), float(config.rule_3_angle_min_deg), float(config.rule_3_angle_max_deg))
 			break
 
 	queue_redraw()
@@ -966,31 +987,78 @@ func _update_speed_rain(delta: float) -> void:
 func rule_infinite_spawn_tick() -> void:
 	if config == null or not config.rule_2_enabled:
 		return
-	if _get_non_neutral_fill_ratio() >= float(config.rule_2_stop_fill_ratio):
+	if _get_leading_territory_ratio() >= float(config.rule_2_stop_fill_ratio):
 		return
-	var team := rng.randi_range(0, team_count - 1)
-	_spawn_custom_marble_for_team(team, float(config.rule_2_small_size_mult), float(config.rule_2_small_speed_mult), 0.0, false)
+	var min_count: int = int(config.rule_2_swarm_count_min)
+	var max_count: int = int(config.rule_2_swarm_count_max)
+	if min_count > max_count:
+		var tmp := min_count
+		min_count = max_count
+		max_count = tmp
+	var count := rng.randi_range(max(1, min_count), max(1, max_count))
+	for i in range(max(1, count)):
+		var team := rng.randi_range(0, team_count - 1)
+		_spawn_custom_marble_for_team(
+			team,
+			float(config.rule_2_small_size_mult),
+			float(config.rule_2_small_speed_mult),
+			float(config.rule_2_spawn_lifetime_sec),
+			false
+		)
+
+
+func _get_leading_territory_ratio() -> float:
+	if config == null:
+		return 0.0
+	var ratios := get_territory_ratio_per_team()
+	var best: float = 0.0
+	for r in ratios:
+		best = max(best, float(r))
+	return best
 
 
 func rule_speed_rain_tick() -> void:
 	if config == null or not config.rule_3_enabled:
 		return
-	var count :float = max(1, int(config.rule_3_zone_count))
+	var count: int = max(1, int(config.rule_3_zone_count))
 	for i in range(count):
 		_spawn_speed_rain_zone()
 	queue_redraw()
 
 
-func rule_mini_swarm_tick() -> void:
-	if config == null or not config.rule_4_enabled:
+func _get_participant_mult(arr: PackedFloat32Array, team: int, fallback: float) -> float:
+	if config == null or not bool(config.participant_rules_enabled):
+		return fallback
+	if team >= 0 and team < arr.size():
+		return float(arr[team])
+	return fallback
+
+
+func _normalize_merged_rules() -> void:
+	if config == null:
 		return
-	var n := rng.randi_range(int(config.rule_4_swarm_count_min), int(config.rule_4_swarm_count_max))
-	for i in range(max(1, n)):
-		var team := rng.randi_range(0, team_count - 1)
-		_spawn_custom_marble_for_team(
-			team,
-			float(config.rule_4_mini_size_mult),
-			float(config.rule_4_mini_speed_mult),
-			float(config.rule_4_mini_lifetime_sec),
-			false
-		)
+
+	if bool(config.rule_4_enabled):
+		config.rule_2_enabled = bool(config.rule_2_enabled) or bool(config.rule_4_enabled)
+		config.rule_2_swarm_count_min = max(int(config.rule_2_swarm_count_min), int(config.rule_4_swarm_count_min))
+		config.rule_2_swarm_count_max = max(int(config.rule_2_swarm_count_max), int(config.rule_4_swarm_count_max))
+		config.rule_2_spawn_lifetime_sec = max(float(config.rule_2_spawn_lifetime_sec), float(config.rule_4_mini_lifetime_sec))
+		config.rule_2_small_speed_mult = max(float(config.rule_2_small_speed_mult), float(config.rule_4_mini_speed_mult))
+		config.rule_2_small_size_mult = min(float(config.rule_2_small_size_mult), float(config.rule_4_mini_size_mult))
+		config.rule_2_period_sec = min(float(config.rule_2_period_sec), max(float(config.rule_4_period_sec), 0.01))
+
+	config.rule_2_swarm_count_min = max(int(config.rule_2_swarm_count_min), 1)
+	config.rule_2_swarm_count_max = max(int(config.rule_2_swarm_count_max), int(config.rule_2_swarm_count_min))
+	config.rule_2_spawn_lifetime_sec = max(float(config.rule_2_spawn_lifetime_sec), 0.0)
+	config.rule_2_period_sec = max(float(config.rule_2_period_sec), 0.01)
+	config.rule_2_stop_fill_ratio = clamp(float(config.rule_2_stop_fill_ratio), 0.0, 1.0)
+
+	if bool(config.rule_5_enabled):
+		config.rule_3_random_direction_enabled = true
+		config.rule_3_angle_min_deg = float(config.rule_5_angle_min_deg)
+		config.rule_3_angle_max_deg = float(config.rule_5_angle_max_deg)
+
+	if config.rule_3_angle_min_deg > config.rule_3_angle_max_deg:
+		var ang_tmp := config.rule_3_angle_min_deg
+		config.rule_3_angle_min_deg = config.rule_3_angle_max_deg
+		config.rule_3_angle_max_deg = ang_tmp

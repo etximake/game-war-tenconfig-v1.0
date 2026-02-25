@@ -46,17 +46,29 @@ class_name GameConfig
 @export var marbles_per_team: int = 1
 
 # =========================
-# escalation_rules (4 luật chính thức)
+# participant_rules
+# =========================
+@export_group("participant_rules")
+@export var participant_rules_enabled: bool = true
+@export var participant_team_size_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
+@export var participant_team_speed_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
+@export var participant_team_count_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
+
+# =========================
+# escalation_rules (đã hợp nhất: 2+4 và 3+5)
 # =========================
 @export_group("escalation_rules")
-@export_subgroup("rule_2_infinite_spawn_until_full")
+@export_subgroup("rule_2_spawn_pressure (merged with old rule_4_mini_marble_swarm)")
 @export var rule_2_enabled: bool = true
 @export var rule_2_period_sec: float = 10.0
 @export var rule_2_small_speed_mult: float = 1.35
 @export var rule_2_small_size_mult: float = 0.7
 @export var rule_2_stop_fill_ratio: float = 0.96
+@export var rule_2_swarm_count_min: int = 1
+@export var rule_2_swarm_count_max: int = 1
+@export var rule_2_spawn_lifetime_sec: float = 0.0
 
-@export_subgroup("rule_3_speed_rain")
+@export_subgroup("rule_3_speed_rain (merged with old rule_5_random_direction_boost)")
 @export var rule_3_enabled: bool = true
 @export var rule_3_period_sec: float = 6.0
 @export var rule_3_zone_count: int = 6
@@ -65,20 +77,21 @@ class_name GameConfig
 @export var rule_3_boost_duration_min_sec: float = 2.0
 @export var rule_3_boost_duration_max_sec: float = 3.0
 @export var rule_3_zone_ttl_sec: float = 4.0
+@export var rule_3_random_direction_enabled: bool = true
+@export var rule_3_angle_min_deg: float = 30.0
+@export var rule_3_angle_max_deg: float = 180.0
 
-@export_subgroup("rule_4_mini_marble_swarm")
-@export var rule_4_enabled: bool = true
-@export var rule_4_period_sec: float = 15.0
-@export var rule_4_swarm_count_min: int = 5
-@export var rule_4_swarm_count_max: int = 10
-@export var rule_4_mini_lifetime_sec: float = 6.0
-@export var rule_4_mini_speed_mult: float = 1.45
-@export var rule_4_mini_size_mult: float = 0.6
-
-@export_subgroup("rule_5_random_direction_boost")
-@export var rule_5_enabled: bool = true
-@export var rule_5_angle_min_deg: float = 30.0
-@export var rule_5_angle_max_deg: float = 180.0
+# Legacy aliases để không làm vỡ preset cũ (rule 4,5)
+@export_storage var rule_4_enabled: bool = true
+@export_storage var rule_4_period_sec: float = 15.0
+@export_storage var rule_4_swarm_count_min: int = 5
+@export_storage var rule_4_swarm_count_max: int = 10
+@export_storage var rule_4_mini_lifetime_sec: float = 6.0
+@export_storage var rule_4_mini_speed_mult: float = 1.45
+@export_storage var rule_4_mini_size_mult: float = 0.6
+@export_storage var rule_5_enabled: bool = true
+@export_storage var rule_5_angle_min_deg: float = 30.0
+@export_storage var rule_5_angle_max_deg: float = 180.0
 
 # =========================
 # fx

@@ -7,7 +7,6 @@ var match_time_sec: float = 0.0
 
 var _acc_rule_2: float = 0.0
 var _acc_rule_3: float = 0.0
-var _acc_rule_4: float = 0.0
 
 func setup(p_world: Node) -> void:
 	world = p_world
@@ -20,7 +19,6 @@ func reset_state() -> void:
 	match_time_sec = 0.0
 	_acc_rule_2 = 0.0
 	_acc_rule_3 = 0.0
-	_acc_rule_4 = 0.0
 
 
 func _process(delta: float) -> void:
@@ -31,7 +29,6 @@ func _process(delta: float) -> void:
 
 	_tick_rule(delta, config.rule_2_enabled, config.rule_2_period_sec, "_acc_rule_2", "rule_infinite_spawn_tick")
 	_tick_rule(delta, config.rule_3_enabled, config.rule_3_period_sec, "_acc_rule_3", "rule_speed_rain_tick")
-	_tick_rule(delta, config.rule_4_enabled, config.rule_4_period_sec, "_acc_rule_4", "rule_mini_swarm_tick")
 
 
 func _tick_rule(delta: float, enabled: bool, period_sec: float, acc_name: StringName, method_name: StringName) -> void:
