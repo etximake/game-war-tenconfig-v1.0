@@ -5,19 +5,19 @@
 
 [resource]
 script = ExtResource("1")
-num_teams = 6
+num_teams = 2
+tick_rate = 12.0
 grid_cell_size = 24
-move_speed = 220.0
-weapon_rotate_speed = 4.0
-participant_rules_enabled = false
-participant_team_size_mult = null
-participant_team_speed_mult = null
-participant_team_count_mult = null
+participant_team_size_mult = PackedFloat32Array(2, 0.3)
+participant_team_speed_mult = PackedFloat32Array(0.8, 1.2)
+participant_team_count_mult = PackedFloat32Array(1, 10)
+rule_2_enabled = false
 rule_2_start_delay_sec = 5.0
 rule_2_small_speed_mult = 1.4
-rule_2_small_size_mult = 0.72
-rule_2_swarm_count_min = 2
-rule_2_swarm_count_max = 2
+rule_2_small_size_mult = 0.5
+rule_2_swarm_count_min = 3
+rule_2_swarm_count_max = 10
+rule_2_spawn_lifetime_sec = 6.0
 rule_3_enabled = false
 rule_3_boost_mult = 1.8
 rule_3_random_direction_enabled = false

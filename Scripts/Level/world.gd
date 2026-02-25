@@ -663,6 +663,15 @@ func get_alive_team_count() -> int:
 	return c
 
 
+func get_alive_team_ids() -> Array[int]:
+	var alive_counts := get_alive_marbles_per_team()
+	var teams: Array[int] = []
+	for t in range(team_count):
+		if int(alive_counts[t]) > 0:
+			teams.append(t)
+	return teams
+
+
 func get_underdog_team_by_marbles() -> int:
 	var alive := get_alive_marbles_per_team()
 	var min_team: int = -1
@@ -1023,6 +1032,9 @@ func _update_speed_rain(delta: float) -> void:
 func rule_infinite_spawn_tick() -> void:
 	if config == null or not config.rule_2_enabled:
 		return
+	var alive_teams := get_alive_team_ids()
+	if alive_teams.is_empty():
+		return
 	if _get_leading_territory_ratio() >= float(config.rule_2_stop_fill_ratio):
 		return
 	var min_count: int = int(config.rule_2_swarm_count_min)
@@ -1033,7 +1045,7 @@ func rule_infinite_spawn_tick() -> void:
 		max_count = tmp
 	var count := rng.randi_range(max(1, min_count), max(1, max_count))
 	for i in range(max(1, count)):
-		var team := rng.randi_range(0, team_count - 1)
+		var team := int(alive_teams[rng.randi_range(0, alive_teams.size() - 1)])
 		_spawn_custom_marble_for_team(
 			team,
 			float(config.rule_2_small_size_mult),
