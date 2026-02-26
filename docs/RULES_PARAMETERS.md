@@ -72,3 +72,10 @@ Mỗi rule có 5 tham số chính:
 - `chaos`: tăng nhịp Rule 1, Rule 7, Rule 10 để trận biến động nhanh.
 - `comeback`: tăng Rule 6 và Rule 5 để hỗ trợ lật kèo.
 - `boss-heavy`: tăng growth/size, rút ngắn chu kỳ Rule 3 để có “boss marble” sớm.
+
+## Bổ sung Rule 2 (spawn pressure) theo loại marble
+
+- `rule_2_enabled_marble_types`: danh sách tên loại marble (lấy từ `MarbleSkin.skin_name`) được phép nhận spawn từ rule 2.
+  - Để rỗng (`[]`) => giữ hành vi cũ, tất cả loại đều được áp dụng.
+  - Ví dụ `["A"]` thì chỉ team đang dùng marble type `A` mới bị/được tác động bởi rule_2.
+- `MarbleSkin.rule_2_spawn_pressure_enabled`: cờ bật/tắt nhanh theo từng skin. Nếu `false` thì loại marble đó bị loại khỏi rule 2 dù có nằm trong danh sách phía trên.

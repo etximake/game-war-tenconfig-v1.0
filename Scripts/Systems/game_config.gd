@@ -68,6 +68,7 @@ class_name GameConfig
 @export var rule_2_swarm_count_min: int = 1
 @export var rule_2_swarm_count_max: int = 1
 @export var rule_2_spawn_lifetime_sec: float = 0.0
+@export var rule_2_enabled_marble_types: PackedStringArray = PackedStringArray()
 
 @export_subgroup("rule_3_speed_rain (merged with old rule_5_random_direction_boost)")
 @export var rule_3_enabled: bool = true
