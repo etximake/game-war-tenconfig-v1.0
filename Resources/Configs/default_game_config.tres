@@ -7,6 +7,7 @@
 script = ExtResource("1")
 num_teams = 2
 tick_rate = 12.0
+team_colors = Array[Color]([Color(0, 0, 1, 1), Color(0, 1, 0, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 0.5, 0, 1)])
 grid_cell_size = 24
 participant_team_size_mult = PackedFloat32Array(2, 0.3)
 participant_team_speed_mult = PackedFloat32Array(0.8, 1.2)

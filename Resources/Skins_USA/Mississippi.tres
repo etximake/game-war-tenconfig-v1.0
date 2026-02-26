@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://bg2gbsaee2vp8"]
+
+[ext_resource type="Texture2D" uid="uid://dddbrei3jde3c" path="res://Assets/Flag_US/Mississippi_round.png" id="1_h5gq3"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_yy4q5"]
+[ext_resource type="Texture2D" uid="uid://cchhekthxvv1n" path="res://Assets/Weapon/Iicon_32_21.png" id="3_yy4q5"]
+
+[resource]
+script = ExtResource("2_yy4q5")
+skin_name = "Mississippi"
+core_texture = ExtResource("1_h5gq3")
+weapon_texture = ExtResource("3_yy4q5")
+metadata/_custom_type_script = "uid://c402lff57jg35"
