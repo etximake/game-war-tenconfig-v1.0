@@ -7,10 +7,15 @@ var owners: PackedInt32Array = PackedInt32Array()
 @export var draw_grid_lines: bool = true
 @export_range(0.0, 1.0, 0.01) var grid_line_alpha: float = 0.25
 @export_range(0.5, 4.0, 0.1) var grid_line_base: float = 1.0
+@export_range(1.0, 120.0, 1.0) var max_redraw_hz: float = 30.0
+@export var neutral_color: Color = Color(0.0, 0.0, 0.0, 1.0)
 
 # Neutral = -1 (chưa ai chiếm)
 const OWNER_NEUTRAL: int = -1
 const OWNER_OOB: int = -999
+
+var _redraw_pending: bool = false
+var _redraw_cd: float = 0.0
 
 
 func setup(p_config: GameConfig) -> void:
@@ -26,6 +31,21 @@ func setup(p_config: GameConfig) -> void:
 	owners.resize(n)
 	for i in range(n):
 		owners[i] = OWNER_NEUTRAL
+
+	set_process(false)
+	_redraw_pending = false
+	_redraw_cd = 0.0
+	_request_redraw()
+
+
+func _process(delta: float) -> void:
+	if not _redraw_pending:
+		return
+	_redraw_cd -= delta
+	if _redraw_cd > 0.0:
+		return
+	_redraw_pending = false
+	_redraw_cd = 1.0 / max(max_redraw_hz, 1.0)
 
 	queue_redraw()
 
@@ -80,7 +100,7 @@ func set_owner_cell(x: int, y: int, team: int, redraw: bool = true) -> void:
 
 	owners[idx] = team
 	if redraw:
-		queue_redraw()
+		_request_redraw()
 
 
 func set_owner_cells_batch(cells: Array[Vector2i], team: int) -> void:
@@ -107,7 +127,7 @@ func set_owner_cells_batch(cells: Array[Vector2i], team: int) -> void:
 		changed = true
 
 	if changed:
-		queue_redraw()
+		_request_redraw()
 
 
 func fill_all(team: int) -> void:
@@ -124,8 +144,11 @@ func fill_all(team: int) -> void:
 		changed = true
 
 	if changed:
-		queue_redraw()
+		_request_redraw()
 
+
+func _request_redraw() -> void:
+	_redraw_pending = true
 
 # =========================
 # Draw
@@ -148,8 +171,7 @@ func _draw() -> void:
 			if owner >= 0 and owner < config.team_colors.size():
 				col = config.team_colors[owner]
 			else:
-				# neutral: hơi xám/đậm để thấy rõ biên
-				col = Color(0.05, 0.05, 0.05, 1.0)
+				col = neutral_color
 
 			draw_rect(Rect2(Vector2(x * cs, y * cs), Vector2(cs, cs)), col, true)
 

@@ -13,7 +13,8 @@ func _ready() -> void:
 		push_error("Main: App.config is null")
 		return
 
-	_setup_fixed_camera(App.config)
+	# Chờ 1 frame để viewport ổn định (fullscreen/borderless) rồi mới fit camera.
+	call_deferred("_refresh_camera_from_viewport")
 	hud.visible = bool(App.config.show_hud)
 	set_process_unhandled_input(true)
 
@@ -28,6 +29,17 @@ func _ready() -> void:
 
 	_update_hud()
 
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_SIZE_CHANGED:
+		_refresh_camera_from_viewport()
+
+
+func _refresh_camera_from_viewport() -> void:
+	if App.config == null:
+		return
+	_setup_fixed_camera(App.config)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
@@ -132,17 +144,22 @@ func _update_camera_director(delta: float) -> void:
 		zoom_mult = float(state.get("zoom_mult", 1.0))
 	elif world.has_method("get_camera_focus_point"):
 		target = world.call("get_camera_focus_point")
-	if target == Vector2.ZERO:
+	if not target.is_finite():
 		return
 
 	zoom_mult = clamp(zoom_mult, float(App.config.camera_director_zoom_in_mult), 1.0)
 	if world.has_method("is_lead_change_recent") and bool(world.call("is_lead_change_recent", float(App.config.camera_director_lead_change_boost_sec))):
 		zoom_mult = min(zoom_mult, float(App.config.camera_director_zoom_in_mult))
 
+	var map_size := Vector2(float(App.config.grid_width * App.config.grid_cell_size), float(App.config.grid_height * App.config.grid_cell_size))
+	target.x = clamp(target.x, 0.0, map_size.x)
+	target.y = clamp(target.y, 0.0, map_size.y)
+
 	var t: float = clamp(float(App.config.camera_director_lerp_speed) * delta, 0.0, 1.0)
-	cam.position = cam.position.lerp(target, t)
+	cam.position = cam.position.lerp(target, t).round()
 	var zoom_target: Vector2 = _cam_base_zoom * zoom_mult
 	cam.zoom = cam.zoom.lerp(zoom_target, t)
+	_update_camera_limits(App.config)
 
 
 func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
@@ -167,14 +184,25 @@ func _setup_fixed_camera(config: GameConfig) -> void:
 	cam.position = Vector2(map_w_px * 0.5, map_h_px * 0.5)
 
 	var vp: Vector2 = get_viewport_rect().size
-	# Dùng "cover" thay vì "fit": luôn phủ kín viewport để không lộ nền xám.
-	var z: float = max(float(vp.x) / map_w_px, float(vp.y) / map_h_px)
-	z = clamp(z, 0.25, 1.0)
+	# Camera2D: screen_world_size = viewport_size * zoom.
+	# Muốn "cover" map (không lộ nền xám) thì zoom phải nhỏ hơn hoặc bằng tỉ lệ map/viewport.
+	var z: float = min(map_w_px / max(vp.x, 1.0), map_h_px / max(vp.y, 1.0))
+	z = clamp(z, 0.05, 1.0)
 
 	cam.zoom = Vector2(z, z)
 	_cam_base_zoom = cam.zoom
 
+	_update_camera_limits(config)
+
+
+func _update_camera_limits(config: GameConfig) -> void:
+	if config == null:
+		return
 	cam.limit_enabled = true
+
+	var map_w_px: float = float(config.grid_width * config.grid_cell_size)
+	var map_h_px: float = float(config.grid_height * config.grid_cell_size)
+	var vp: Vector2 = get_viewport_rect().size
 	var half_view_world: Vector2 = vp * 0.5 * cam.zoom
 	var left_limit: int = int(round(half_view_world.x))
 	var top_limit: int = int(round(half_view_world.y))
