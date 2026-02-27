@@ -94,6 +94,7 @@ func start_match() -> void:
 	for t in range(team_count):
 		_milestone_count_by_team[t] = 0
 		_extra_spawned_by_team[t] = 0
+	_prime_milestone_progress_from_seeded_territory()
 
 	# ✅ FIX: spawn theo marbles_per_team (không còn 1 per region)
 	_spawn_marbles_by_config(team_count, int(config.marbles_per_team))
@@ -669,6 +670,22 @@ func _apply_speed_all() -> void:
 		m.apply_speed_mult(final_mult)
 
 
+func get_team_display_name(team: int) -> String:
+	if team < 0:
+		return "Team"
+	if available_skins.is_empty():
+		return "Team %d" % (team + 1)
+	var skin: MarbleSkin = available_skins[team % available_skins.size()]
+	if skin == null:
+		return "Team %d" % (team + 1)
+	var name_text: String = skin.skin_name.strip_edges()
+	if name_text == "":
+		name_text = skin.resource_name.strip_edges()
+	if name_text == "":
+		name_text = "Team %d" % (team + 1)
+	return name_text
+
+
 func get_alive_marbles_per_team() -> Array[int]:
 	var alive: Array[int] = []
 	alive.resize(team_count)
@@ -1066,6 +1083,29 @@ func _tick_milestone_rewards() -> void:
 		_milestone_count_by_team[team] = current_count + grants
 
 
+func _prime_milestone_progress_from_seeded_territory() -> void:
+	if config == null:
+		return
+	if not bool(config.milestone_rewards_enabled):
+		return
+	if int(config.milestone_reward_cap_per_team) <= 0:
+		return
+
+	var thresholds: PackedFloat32Array = config.milestone_thresholds
+	if thresholds.is_empty():
+		return
+
+	var ratios := get_territory_ratio_per_team()
+	var cap: int = int(config.milestone_reward_cap_per_team)
+	for team in range(min(team_count, ratios.size())):
+		var ratio: float = float(ratios[team])
+		var baseline: int = 0
+		for th in thresholds:
+			if ratio >= clamp(float(th), 0.0, 1.0):
+				baseline += 1
+		_milestone_count_by_team[team] = clamp(baseline, 0, cap)
+
+
 func _grant_milestone_reward(team: int) -> void:
 	var spawn_count: int = max(int(config.milestone_reward_spawn_count), 0)
 	for _i in range(spawn_count):
@@ -1184,7 +1224,13 @@ func get_team_momentum_signs(window_sec: float) -> Array[int]:
 	return signs
 
 
-func get_camera_focus_point() -> Vector2:
+func get_camera_director_state() -> Dictionary:
+	var center := _get_map_center_world()
+	if config == null:
+		return {"focus": center, "zoom_mult": 1.0}
+
+	var zoom_in_mult: float = clamp(float(config.camera_director_zoom_in_mult), 0.5, 1.0)
+
 	if not _hot_zones.is_empty():
 		var top := _hot_zones[0]
 		var top_intensity: float = float(top.get("intensity", 0.0))
@@ -1193,13 +1239,67 @@ func get_camera_focus_point() -> Vector2:
 			if iv > top_intensity:
 				top = hz
 				top_intensity = iv
-		return top.get("pos", Vector2.ZERO)
+		var hot_zoom: float = clamp(1.0 - (top_intensity - 1.0) * 0.12, zoom_in_mult, 1.0)
+		return {"focus": top.get("pos", center), "zoom_mult": hot_zoom}
+
+	var frontline := _get_frontline_focus_state()
+	if bool(frontline.get("valid", false)):
+		return {"focus": frontline.get("focus", center), "zoom_mult": frontline.get("zoom_mult", 1.0)}
 
 	if _last_leader_team >= 0:
 		var c := _get_team_centroid(_last_leader_team)
 		if c != Vector2.ZERO:
-			return c
+			return {"focus": c, "zoom_mult": 1.0}
 
+	return {"focus": center, "zoom_mult": 1.0}
+
+
+func get_camera_focus_point() -> Vector2:
+	var state := get_camera_director_state()
+	return state.get("focus", _get_map_center_world())
+
+
+func _get_frontline_focus_state() -> Dictionary:
+	var team_centroids: Dictionary = {}
+	for team in range(team_count):
+		var c := _get_team_centroid(team)
+		if c != Vector2.ZERO:
+			team_centroids[team] = c
+	if team_centroids.size() < 2:
+		return {"valid": false}
+
+	var teams := team_centroids.keys()
+	var best_a: int = -1
+	var best_b: int = -1
+	var best_dist_sq: float = INF
+	for i in range(teams.size()):
+		var ta: int = int(teams[i])
+		var ca: Vector2 = team_centroids[ta]
+		for j in range(i + 1, teams.size()):
+			var tb: int = int(teams[j])
+			var cb: Vector2 = team_centroids[tb]
+			var d2: float = ca.distance_squared_to(cb)
+			if d2 < best_dist_sq:
+				best_dist_sq = d2
+				best_a = ta
+				best_b = tb
+
+	if best_a == -1 or best_b == -1:
+		return {"valid": false}
+
+	var a: Vector2 = team_centroids[best_a]
+	var b: Vector2 = team_centroids[best_b]
+	var focus: Vector2 = (a + b) * 0.5
+	var dist: float = sqrt(best_dist_sq)
+	var map_diag: float = Vector2(float(config.grid_width * config.grid_cell_size), float(config.grid_height * config.grid_cell_size)).length()
+	var zoom_in_mult: float = clamp(float(config.camera_director_zoom_in_mult), 0.5, 1.0)
+	var far_dist: float = max(map_diag * 0.75, 1.0)
+	var t: float = clamp(dist / far_dist, 0.0, 1.0)
+	var zoom_mult: float = lerp(zoom_in_mult, 1.0, t)
+	return {"valid": true, "focus": focus, "zoom_mult": zoom_mult}
+
+
+func _get_map_center_world() -> Vector2:
 	if config == null:
 		return Vector2.ZERO
 	return Vector2(float(config.grid_width * config.grid_cell_size) * 0.5, float(config.grid_height * config.grid_cell_size) * 0.5)

@@ -110,7 +110,8 @@ func _update_hud() -> void:
 				arrow = "↑"
 			elif sign < 0:
 				arrow = "↓"
-			lines.append("#%d T%d: %5.1f%% | %d marbles | %s" % [i + 1, team, float(r.get("ratio", 0.0)) * 100.0, int(r.get("alive", 0)), arrow])
+			var team_name: String = _get_team_label(team)
+			lines.append("#%d %s: %5.1f%% | %d marbles | %s" % [i + 1, team_name, float(r.get("ratio", 0.0)) * 100.0, int(r.get("alive", 0)), arrow])
 
 	hud.text = "\n".join(lines)
 
@@ -122,30 +123,36 @@ func _update_camera_director(delta: float) -> void:
 		return
 	if not world:
 		return
-	if not world.has_method("get_camera_focus_point"):
-		return
 
-	var target: Vector2 = world.call("get_camera_focus_point")
+	var target: Vector2 = Vector2.ZERO
+	var zoom_mult: float = 1.0
+	if world.has_method("get_camera_director_state"):
+		var state: Dictionary = world.call("get_camera_director_state")
+		target = state.get("focus", Vector2.ZERO)
+		zoom_mult = float(state.get("zoom_mult", 1.0))
+	elif world.has_method("get_camera_focus_point"):
+		target = world.call("get_camera_focus_point")
 	if target == Vector2.ZERO:
 		return
 
+	zoom_mult = clamp(zoom_mult, float(App.config.camera_director_zoom_in_mult), 1.0)
+	if world.has_method("is_lead_change_recent") and bool(world.call("is_lead_change_recent", float(App.config.camera_director_lead_change_boost_sec))):
+		zoom_mult = min(zoom_mult, float(App.config.camera_director_zoom_in_mult))
+
 	var t: float = clamp(float(App.config.camera_director_lerp_speed) * delta, 0.0, 1.0)
 	cam.position = cam.position.lerp(target, t)
-
-	var zoom_target: Vector2 = _cam_base_zoom
-	if world.has_method("is_lead_change_recent") and bool(world.call("is_lead_change_recent", float(App.config.camera_director_lead_change_boost_sec))):
-		zoom_target = _cam_base_zoom * float(App.config.camera_director_zoom_in_mult)
+	var zoom_target: Vector2 = _cam_base_zoom * zoom_mult
 	cam.zoom = cam.zoom.lerp(zoom_target, t)
 
 
 func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
 	var msg := ""
 	if reason == "last_team_alive":
-		msg = "WIN: Team %d (last team alive)" % winner_team
+		msg = "WIN: %s (last team alive)" % _get_team_label(winner_team)
 	elif reason == "territory_90":
-		msg = "WIN: Team %d (territory %.1f%%)" % [winner_team, territory_ratio * 100.0]
+		msg = "WIN: %s (territory %.1f%%)" % [_get_team_label(winner_team), territory_ratio * 100.0]
 	else:
-		msg = "WIN: Team %d" % winner_team
+		msg = "WIN: %s" % _get_team_label(winner_team)
 
 	_update_hud()
 	hud.text += "\n" + msg
@@ -160,8 +167,36 @@ func _setup_fixed_camera(config: GameConfig) -> void:
 	cam.position = Vector2(map_w_px * 0.5, map_h_px * 0.5)
 
 	var vp: Vector2 = get_viewport_rect().size
-	var z: float = min(float(vp.x) / map_w_px, float(vp.y) / map_h_px)
+	# Dùng "cover" thay vì "fit": luôn phủ kín viewport để không lộ nền xám.
+	var z: float = max(float(vp.x) / map_w_px, float(vp.y) / map_h_px)
 	z = clamp(z, 0.25, 1.0)
 
 	cam.zoom = Vector2(z, z)
 	_cam_base_zoom = cam.zoom
+
+	cam.limit_enabled = true
+	var half_view_world: Vector2 = vp * 0.5 * cam.zoom
+	var left_limit: int = int(round(half_view_world.x))
+	var top_limit: int = int(round(half_view_world.y))
+	var right_limit: int = int(round(map_w_px - half_view_world.x))
+	var bottom_limit: int = int(round(map_h_px - half_view_world.y))
+
+	if right_limit < left_limit:
+		var cx: int = int(round(map_w_px * 0.5))
+		left_limit = cx
+		right_limit = cx
+	if bottom_limit < top_limit:
+		var cy: int = int(round(map_h_px * 0.5))
+		top_limit = cy
+		bottom_limit = cy
+
+	cam.limit_left = left_limit
+	cam.limit_top = top_limit
+	cam.limit_right = right_limit
+	cam.limit_bottom = bottom_limit
+
+
+func _get_team_label(team: int) -> String:
+	if world and world.has_method("get_team_display_name"):
+		return str(world.call("get_team_display_name", team))
+	return "Team %d" % (team + 1)

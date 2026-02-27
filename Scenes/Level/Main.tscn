@@ -1,10 +1,17 @@
-[gd_scene load_steps=6 format=3 uid="uid://d1w7d1dtglwsw"]
+[gd_scene load_steps=8 format=3 uid="uid://d1w7d1dtglwsw"]
 
 [ext_resource type="Script" uid="uid://b4emorq00844p" path="res://Scripts/Level/main.gd" id="1_6lraq"]
 [ext_resource type="Script" uid="uid://dqgr8v8btj2sq" path="res://Scripts/Level/world.gd" id="1_isv4o"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="3_htilh"]
 [ext_resource type="Resource" uid="uid://rxhns2xea0hs" path="res://Resources/Skins_USA/New York.tres" id="4_fbwek"]
 [ext_resource type="Resource" uid="uid://toui7e5f43qq" path="res://Resources/Skins_USA/Hawaii.tres" id="5_pcup4"]
+
+[sub_resource type="SystemFont" id="SystemFont_fbwek"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_fbwek"]
+font = SubResource("SystemFont_fbwek")
+outline_size = 2
+outline_color = Color(0, 0, 0, 1)
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_6lraq")
@@ -16,7 +23,6 @@ team_count = 2
 available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("5_pcup4")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
-position_smoothing_enabled = true
 
 [node name="UI" type="CanvasLayer" parent="."]
 
@@ -24,4 +30,5 @@ position_smoothing_enabled = true
 offset_right = 40.0
 offset_bottom = 23.0
 text = "HUD"
+label_settings = SubResource("LabelSettings_fbwek")
 metadata/_edit_use_anchors_ = true
