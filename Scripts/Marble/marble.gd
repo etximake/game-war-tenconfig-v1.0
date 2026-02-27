@@ -217,12 +217,38 @@ func _on_weapon_body_entered(body: Node) -> void:
 
 	kill_count += 1
 	if App.config != null:
-		size_scale = min(size_scale + float(App.config.growth_step), float(App.config.max_size_scale))
+		var step := _get_dynamic_growth_step()
+		size_scale = min(size_scale + step, float(App.config.max_size_scale))
 	else:
 		size_scale += 0.08
 
 	apply_size_scale()
 	KillSfxMgr.play_kill(victim.global_position, size_scale)
+
+
+func _get_dynamic_growth_step() -> float:
+	if App.config == null:
+		return 0.08
+
+	var base_step: float = float(App.config.growth_step)
+	if not bool(App.config.growth_phase_enabled):
+		return base_step
+
+	var match_time: float = 0.0
+	var owner := get_parent()
+	if owner != null and owner.has_method("get_match_time_sec"):
+		match_time = float(owner.call("get_match_time_sec"))
+
+	var early_until: float = max(float(App.config.growth_early_duration_sec), 0.0)
+	var late_from: float = max(float(App.config.growth_late_start_sec), early_until)
+
+	var mult: float = float(App.config.growth_mid_mult)
+	if match_time < early_until:
+		mult = float(App.config.growth_early_mult)
+	elif match_time >= late_from:
+		mult = float(App.config.growth_late_mult)
+
+	return max(base_step * max(mult, 0.0), 0.0)
 
 
 

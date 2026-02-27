@@ -55,6 +55,47 @@ class_name GameConfig
 @export var participant_team_count_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
 
 # =========================
+# competitive_drama (B)
+# =========================
+@export_group("competitive_drama")
+@export_subgroup("growth_phase")
+@export var growth_phase_enabled: bool = true
+@export var growth_early_duration_sec: float = 25.0
+@export var growth_late_start_sec: float = 70.0
+@export var growth_early_mult: float = 0.7
+@export var growth_mid_mult: float = 1.0
+@export var growth_late_mult: float = 1.25
+
+@export_subgroup("underdog")
+@export var underdog_enabled: bool = true
+@export var underdog_period_sec: float = 8.0
+@export var underdog_duration_sec: float = 3.0
+@export var underdog_speed_mult: float = 1.18
+@export var underdog_use_marble_count: bool = false
+
+@export_subgroup("milestone_rewards")
+@export var milestone_rewards_enabled: bool = true
+@export var milestone_thresholds: PackedFloat32Array = PackedFloat32Array([0.20, 0.35, 0.50])
+@export var milestone_reward_cap_per_team: int = 3
+@export var milestone_reward_spawn_count: int = 1
+@export var milestone_reward_spawn_size_mult: float = 0.82
+@export var milestone_reward_speed_mult: float = 1.12
+@export var milestone_reward_speed_duration_sec: float = 4.0
+
+# =========================
+# spectator_readability (C)
+# =========================
+@export_group("spectator_readability")
+@export var hud_momentum_window_sec: float = 4.0
+@export var hot_zone_enabled: bool = true
+@export var hot_zone_ttl_sec: float = 2.5
+@export var hot_zone_min_hits: int = 2
+@export var camera_director_enabled: bool = true
+@export var camera_director_lerp_speed: float = 3.5
+@export var camera_director_zoom_in_mult: float = 0.88
+@export var camera_director_lead_change_boost_sec: float = 1.8
+
+# =========================
 # escalation_rules (đã hợp nhất: 2+4 và 3+5)
 # =========================
 @export_group("escalation_rules")

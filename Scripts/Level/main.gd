@@ -5,6 +5,7 @@ extends Node2D
 @onready var hud: Label = $UI/HUD
 
 var _hud_timer: float = 0.0
+var _cam_base_zoom: Vector2 = Vector2.ONE
 
 func _ready() -> void:
 	if App.config == null:
@@ -48,6 +49,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if App.config == null:
 		return
+	_update_camera_director(delta)
 	if not hud.visible:
 		return
 	_hud_timer -= delta
@@ -88,10 +90,52 @@ func _update_hud() -> void:
 	if world.has_method("get_territory_ratio_per_team") and world.has_method("get_alive_marbles_per_team"):
 		var ratios: Array = world.call("get_territory_ratio_per_team")
 		var alive: Array = world.call("get_alive_marbles_per_team")
+		var momentum: Array = []
+		if world.has_method("get_team_momentum_signs"):
+			momentum = world.call("get_team_momentum_signs", float(App.config.hud_momentum_window_sec))
+
+		var rows: Array[Dictionary] = []
 		for t in range(min(ratios.size(), alive.size())):
-			lines.append("T%d: %5.1f%% | %d marbles" % [t, float(ratios[t]) * 100.0, int(alive[t])])
+			rows.append({"team": t, "ratio": float(ratios[t]), "alive": int(alive[t])})
+		rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a.get("ratio", 0.0)) > float(b.get("ratio", 0.0))
+		)
+
+		for i in range(rows.size()):
+			var r := rows[i]
+			var team: int = int(r.get("team", 0))
+			var sign: int = int(momentum[team]) if team < momentum.size() else 0
+			var arrow: String = "→"
+			if sign > 0:
+				arrow = "↑"
+			elif sign < 0:
+				arrow = "↓"
+			lines.append("#%d T%d: %5.1f%% | %d marbles | %s" % [i + 1, team, float(r.get("ratio", 0.0)) * 100.0, int(r.get("alive", 0)), arrow])
 
 	hud.text = "\n".join(lines)
+
+
+func _update_camera_director(delta: float) -> void:
+	if App.config == null:
+		return
+	if not bool(App.config.camera_director_enabled):
+		return
+	if not world:
+		return
+	if not world.has_method("get_camera_focus_point"):
+		return
+
+	var target: Vector2 = world.call("get_camera_focus_point")
+	if target == Vector2.ZERO:
+		return
+
+	var t: float = clamp(float(App.config.camera_director_lerp_speed) * delta, 0.0, 1.0)
+	cam.position = cam.position.lerp(target, t)
+
+	var zoom_target: Vector2 = _cam_base_zoom
+	if world.has_method("is_lead_change_recent") and bool(world.call("is_lead_change_recent", float(App.config.camera_director_lead_change_boost_sec))):
+		zoom_target = _cam_base_zoom * float(App.config.camera_director_zoom_in_mult)
+	cam.zoom = cam.zoom.lerp(zoom_target, t)
 
 
 func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
@@ -120,3 +164,4 @@ func _setup_fixed_camera(config: GameConfig) -> void:
 	z = clamp(z, 0.25, 1.0)
 
 	cam.zoom = Vector2(z, z)
+	_cam_base_zoom = cam.zoom

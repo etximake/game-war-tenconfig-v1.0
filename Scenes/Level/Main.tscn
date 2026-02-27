@@ -16,6 +16,7 @@ team_count = 2
 available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("5_pcup4")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
 
 [node name="UI" type="CanvasLayer" parent="."]
 

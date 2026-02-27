@@ -44,6 +44,12 @@ var _extra_spawned_by_team: Dictionary = {}
 var _speed_rain_zones: Array[Dictionary] = []
 var _mini_swarm_ids: Dictionary = {}
 var _rule_4_flash_cells: Array[Dictionary] = []
+var _hot_cells: Dictionary = {}
+var _hot_zones: Array[Dictionary] = []
+var _underdog_acc_sec: float = 0.0
+var _ratio_history: Array[Dictionary] = []
+var _last_leader_team: int = -1
+var _last_lead_change_sec: float = -9999.0
 
 
 func start_match() -> void:
@@ -100,14 +106,15 @@ func start_match() -> void:
 func _physics_process(_delta: float) -> void:
 	if config == null:
 		return
-	if marbles.is_empty() and _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
+	if marbles.is_empty() and _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty() and _hot_zones.is_empty():
 		return
 	_update_speed_rain(_delta)
+	_update_hot_zones(_delta)
 
 
 func _process(_delta: float) -> void:
-	# Giữ hiệu ứng blink của Rule 3 + Rule 4 animate rõ ràng theo frame.
-	if not _speed_rain_zones.is_empty() or not _rule_4_flash_cells.is_empty():
+	# Giữ hiệu ứng blink theo frame cho layer readability.
+	if not _speed_rain_zones.is_empty() or not _rule_4_flash_cells.is_empty() or not _hot_zones.is_empty():
 		queue_redraw()
 
 
@@ -177,10 +184,17 @@ func _on_tick() -> void:
 		var arr := paint_map[t] as Array[Vector2i]
 		if arr.is_empty():
 			continue
+		for c in arr:
+			var old_owner: int = int(grid.call("get_owner_cell", c.x, c.y))
+			if old_owner != t:
+				_register_hot_cell(c)
 		grid.call("set_owner_cells_batch", arr, t)
 
-	_match_time_sec += tick_timer.wait_time if tick_timer else (1.0 / max(config.tick_rate, 1.0))
+	var tick_dt: float = tick_timer.wait_time if tick_timer else (1.0 / max(config.tick_rate, 1.0))
+	_match_time_sec += tick_dt
 	_update_speed_state_timers()
+	_tick_competitive_drama(tick_dt)
+	_record_ratio_history_and_leader()
 
 	if not _match_over:
 		_check_win_conditions()
@@ -189,7 +203,7 @@ func _on_tick() -> void:
 func _draw() -> void:
 	if config == null:
 		return
-	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
+	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty() and _hot_zones.is_empty():
 		return
 	var cell_size: float = float(config.grid_cell_size)
 	var blink_strength: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.020)
@@ -209,6 +223,16 @@ func _draw() -> void:
 		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
 		draw_rect(rect, Color(1.0, 0.65, 0.10, (0.30 + 0.70 * blink_strength) * alpha), true)
 		draw_rect(rect.grow(2.0), Color(1.0, 1.0, 1.0, (0.35 + 0.60 * blink_strength) * alpha), false, 2.0)
+
+	for hz in _hot_zones:
+		var hp: Vector2 = hz.get("pos", Vector2.ZERO)
+		var httl: float = float(hz.get("ttl", 0.0))
+		var hmax: float = max(float(hz.get("max_ttl", 0.1)), 0.1)
+		var intensity: float = clamp(float(hz.get("intensity", 1.0)), 0.6, 3.0)
+		var halpha: float = clamp(httl / hmax, 0.25, 1.0)
+		var r: float = cell_size * (0.55 + 0.24 * intensity)
+		draw_circle(hp, r, Color(1.0, 0.22, 0.15, (0.12 + 0.28 * blink_strength) * halpha))
+		draw_arc(hp, r + 2.0, 0.0, TAU, 22, Color(1.0, 1.0, 1.0, (0.10 + 0.30 * blink_strength) * halpha), 1.5)
 
 	
 func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
@@ -437,6 +461,12 @@ func _clear_previous_match() -> void:
 	_speed_rain_zones.clear()
 	_mini_swarm_ids.clear()
 	_rule_4_flash_cells.clear()
+	_hot_cells.clear()
+	_hot_zones.clear()
+	_underdog_acc_sec = 0.0
+	_ratio_history.clear()
+	_last_leader_team = -1
+	_last_lead_change_sec = -9999.0
 	
 	_last_tip_cell_by_id.clear()
 
@@ -978,6 +1008,222 @@ func _get_non_neutral_fill_ratio() -> float:
 	return float(owned) / float(total)
 
 
+func get_match_time_sec() -> float:
+	return _match_time_sec
+
+
+func _tick_competitive_drama(delta: float) -> void:
+	if config == null:
+		return
+	_tick_underdog_buff(delta)
+	_tick_milestone_rewards()
+
+
+func _tick_underdog_buff(delta: float) -> void:
+	if not bool(config.underdog_enabled):
+		return
+	_underdog_acc_sec += delta
+	var period: float = max(float(config.underdog_period_sec), 0.1)
+	if _underdog_acc_sec < period:
+		return
+	_underdog_acc_sec = 0.0
+
+	var team: int = get_underdog_team_by_marbles() if bool(config.underdog_use_marble_count) else get_underdog_team()
+	if team < 0 or team >= team_count:
+		return
+
+	var speed_mult: float = max(float(config.underdog_speed_mult), 1.0)
+	var duration: float = max(float(config.underdog_duration_sec), 0.1)
+	team_buff_mult[team] = max(float(team_buff_mult.get(team, 1.0)), speed_mult)
+	team_buff_until_sec[team] = max(float(team_buff_until_sec.get(team, 0.0)), _match_time_sec + duration)
+	_apply_speed_all()
+
+
+func _tick_milestone_rewards() -> void:
+	if not bool(config.milestone_rewards_enabled):
+		return
+	if int(config.milestone_reward_cap_per_team) <= 0:
+		return
+
+	var thresholds: PackedFloat32Array = config.milestone_thresholds
+	if thresholds.is_empty():
+		return
+
+	var ratios := get_territory_ratio_per_team()
+	var cap: int = int(config.milestone_reward_cap_per_team)
+	for team in range(min(team_count, ratios.size())):
+		var ratio: float = float(ratios[team])
+		var target_count: int = 0
+		for th in thresholds:
+			if ratio >= clamp(float(th), 0.0, 1.0):
+				target_count += 1
+		var current_count: int = int(_milestone_count_by_team.get(team, 0))
+		var grants: int = clamp(target_count - current_count, 0, cap - current_count)
+		if grants <= 0:
+			continue
+		for _i in range(grants):
+			_grant_milestone_reward(team)
+		_milestone_count_by_team[team] = current_count + grants
+
+
+func _grant_milestone_reward(team: int) -> void:
+	var spawn_count: int = max(int(config.milestone_reward_spawn_count), 0)
+	for _i in range(spawn_count):
+		_spawn_custom_marble_for_team(
+			team,
+			float(config.milestone_reward_spawn_size_mult),
+			1.0,
+			0.0,
+			true
+		)
+
+	var speed_mult: float = max(float(config.milestone_reward_speed_mult), 1.0)
+	var duration: float = max(float(config.milestone_reward_speed_duration_sec), 0.1)
+	if speed_mult > 1.0:
+		team_buff_mult[team] = max(float(team_buff_mult.get(team, 1.0)), speed_mult)
+		team_buff_until_sec[team] = max(float(team_buff_until_sec.get(team, 0.0)), _match_time_sec + duration)
+		_apply_speed_all()
+
+
+func _register_hot_cell(cell: Vector2i) -> void:
+	if config == null or not bool(config.hot_zone_enabled):
+		return
+	if not _is_inside_play_rect(cell):
+		return
+	var key: String = "%d:%d" % [cell.x, cell.y]
+	var ttl: float = max(float(config.hot_zone_ttl_sec), 0.2)
+	var item: Dictionary = _hot_cells.get(key, {"cell": cell, "hits": 0, "ttl": ttl})
+	item["hits"] = int(item.get("hits", 0)) + 1
+	item["ttl"] = ttl
+	_hot_cells[key] = item
+
+
+func _update_hot_zones(delta: float) -> void:
+	if config == null:
+		return
+	if _hot_cells.is_empty():
+		_hot_zones.clear()
+		return
+
+	var min_hits: int = max(int(config.hot_zone_min_hits), 1)
+	var ttl_base: float = max(float(config.hot_zone_ttl_sec), 0.2)
+	_hot_zones.clear()
+	for key in _hot_cells.keys():
+		var item: Dictionary = _hot_cells[key]
+		var ttl: float = float(item.get("ttl", 0.0)) - delta
+		if ttl <= 0.0:
+			_hot_cells.erase(key)
+			continue
+		item["ttl"] = ttl
+		_hot_cells[key] = item
+		var hits: int = int(item.get("hits", 0))
+		if hits < min_hits:
+			continue
+		var cell: Vector2i = item.get("cell", Vector2i.ZERO)
+		var pos: Vector2 = grid.call("cell_to_world", cell) + Vector2(float(config.grid_cell_size) * 0.5, float(config.grid_cell_size) * 0.5)
+		_hot_zones.append({"pos": pos, "ttl": ttl, "max_ttl": ttl_base, "intensity": float(hits)})
+
+
+func get_hot_zones() -> Array[Dictionary]:
+	return _hot_zones.duplicate(true)
+
+
+func _record_ratio_history_and_leader() -> void:
+	var ratios := get_territory_ratio_per_team()
+	_ratio_history.append({"t": _match_time_sec, "ratios": ratios.duplicate()})
+	while _ratio_history.size() > 128:
+		_ratio_history.remove_at(0)
+
+	var leader: int = _get_leader_team_from_ratios(ratios)
+	if leader != _last_leader_team:
+		if _last_leader_team != -1:
+			_last_lead_change_sec = _match_time_sec
+		_last_leader_team = leader
+
+
+func _get_leader_team_from_ratios(ratios: Array) -> int:
+	var best_team: int = -1
+	var best_ratio: float = -1.0
+	for t in range(min(team_count, ratios.size())):
+		var r: float = float(ratios[t])
+		if r > best_ratio:
+			best_ratio = r
+			best_team = t
+	return best_team
+
+
+func get_team_momentum_signs(window_sec: float) -> Array[int]:
+	var signs: Array[int] = []
+	signs.resize(team_count)
+	for i in range(team_count):
+		signs[i] = 0
+	if _ratio_history.size() < 2:
+		return signs
+
+	var now := _ratio_history[_ratio_history.size() - 1]
+	var now_t: float = float(now.get("t", _match_time_sec))
+	var now_ratios: Array = now.get("ratios", [])
+	var target_t: float = now_t - max(window_sec, 0.5)
+
+	var old := _ratio_history[0]
+	for i in range(_ratio_history.size() - 1, -1, -1):
+		var e := _ratio_history[i]
+		if float(e.get("t", 0.0)) <= target_t:
+			old = e
+			break
+	var old_ratios: Array = old.get("ratios", [])
+
+	for t in range(team_count):
+		if t >= now_ratios.size() or t >= old_ratios.size():
+			continue
+		var d: float = float(now_ratios[t]) - float(old_ratios[t])
+		if d > 0.004:
+			signs[t] = 1
+		elif d < -0.004:
+			signs[t] = -1
+	return signs
+
+
+func get_camera_focus_point() -> Vector2:
+	if not _hot_zones.is_empty():
+		var top := _hot_zones[0]
+		var top_intensity: float = float(top.get("intensity", 0.0))
+		for hz in _hot_zones:
+			var iv: float = float(hz.get("intensity", 0.0))
+			if iv > top_intensity:
+				top = hz
+				top_intensity = iv
+		return top.get("pos", Vector2.ZERO)
+
+	if _last_leader_team >= 0:
+		var c := _get_team_centroid(_last_leader_team)
+		if c != Vector2.ZERO:
+			return c
+
+	if config == null:
+		return Vector2.ZERO
+	return Vector2(float(config.grid_width * config.grid_cell_size) * 0.5, float(config.grid_height * config.grid_cell_size) * 0.5)
+
+
+func _get_team_centroid(team: int) -> Vector2:
+	var sum := Vector2.ZERO
+	var count: int = 0
+	for m in marbles:
+		if not is_instance_valid(m):
+			continue
+		if int(m.team_id) != team:
+			continue
+		sum += m.global_position
+		count += 1
+	if count <= 0:
+		return Vector2.ZERO
+	return sum / float(count)
+
+
+func is_lead_change_recent(window_sec: float) -> bool:
+	return (_match_time_sec - _last_lead_change_sec) <= max(window_sec, 0.1)
+
+
 func _spawn_speed_rain_zone() -> void:
 	if config == null:
 		return
@@ -1146,3 +1392,23 @@ func _normalize_merged_rules() -> void:
 		var ang_tmp := config.rule_3_angle_min_deg
 		config.rule_3_angle_min_deg = config.rule_3_angle_max_deg
 		config.rule_3_angle_max_deg = ang_tmp
+
+	config.growth_early_duration_sec = max(float(config.growth_early_duration_sec), 0.0)
+	config.growth_late_start_sec = max(float(config.growth_late_start_sec), float(config.growth_early_duration_sec))
+	config.growth_early_mult = max(float(config.growth_early_mult), 0.0)
+	config.growth_mid_mult = max(float(config.growth_mid_mult), 0.0)
+	config.growth_late_mult = max(float(config.growth_late_mult), 0.0)
+	config.underdog_period_sec = max(float(config.underdog_period_sec), 0.1)
+	config.underdog_duration_sec = max(float(config.underdog_duration_sec), 0.1)
+	config.underdog_speed_mult = max(float(config.underdog_speed_mult), 1.0)
+	config.milestone_reward_cap_per_team = max(int(config.milestone_reward_cap_per_team), 0)
+	config.milestone_reward_spawn_count = max(int(config.milestone_reward_spawn_count), 0)
+	config.milestone_reward_spawn_size_mult = clamp(float(config.milestone_reward_spawn_size_mult), 0.2, 2.0)
+	config.milestone_reward_speed_mult = max(float(config.milestone_reward_speed_mult), 1.0)
+	config.milestone_reward_speed_duration_sec = max(float(config.milestone_reward_speed_duration_sec), 0.1)
+	config.hud_momentum_window_sec = max(float(config.hud_momentum_window_sec), 0.5)
+	config.hot_zone_ttl_sec = max(float(config.hot_zone_ttl_sec), 0.2)
+	config.hot_zone_min_hits = max(int(config.hot_zone_min_hits), 1)
+	config.camera_director_lerp_speed = max(float(config.camera_director_lerp_speed), 0.1)
+	config.camera_director_zoom_in_mult = clamp(float(config.camera_director_zoom_in_mult), 0.5, 1.0)
+	config.camera_director_lead_change_boost_sec = max(float(config.camera_director_lead_change_boost_sec), 0.1)
