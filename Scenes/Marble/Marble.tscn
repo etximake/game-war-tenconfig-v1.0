@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://dmgnh27njbn5h"]
 
 [ext_resource type="Script" uid="uid://4kibmowkynq" path="res://Scripts/Marble/marble.gd" id="1_3mo50"]
-[ext_resource type="Texture2D" uid="uid://bi1eyfmgk3ahw" path="res://Assets/Flag/Alabama_round.png" id="2_7mvxq"]
+[ext_resource type="Texture2D" uid="uid://bi1eyfmgk3ahw" path="res://Assets/Flag_US/Alabama_round.png" id="2_7mvxq"]
 [ext_resource type="Texture2D" uid="uid://bnfl0b60nlpfp" path="res://Assets/Weapon/Iicon_32_08.png" id="3_k67yk"]
 
 [sub_resource type="SystemFont" id="SystemFont_7mvxq"]

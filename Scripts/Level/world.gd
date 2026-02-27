@@ -1035,6 +1035,13 @@ func rule_infinite_spawn_tick() -> void:
 	var alive_teams := get_alive_team_ids()
 	if alive_teams.is_empty():
 		return
+	var eligible_teams: Array[int] = []
+	for team in alive_teams:
+		var team_id: int = int(team)
+		if _is_rule_2_enabled_for_team(team_id):
+			eligible_teams.append(team_id)
+	if eligible_teams.is_empty():
+		return
 	if _get_leading_territory_ratio() >= float(config.rule_2_stop_fill_ratio):
 		return
 	var min_count: int = int(config.rule_2_swarm_count_min)
@@ -1045,7 +1052,7 @@ func rule_infinite_spawn_tick() -> void:
 		max_count = tmp
 	var count := rng.randi_range(max(1, min_count), max(1, max_count))
 	for i in range(max(1, count)):
-		var team := int(alive_teams[rng.randi_range(0, alive_teams.size() - 1)])
+		var team := int(eligible_teams[rng.randi_range(0, eligible_teams.size() - 1)])
 		_spawn_custom_marble_for_team(
 			team,
 			float(config.rule_2_small_size_mult),
@@ -1053,6 +1060,42 @@ func rule_infinite_spawn_tick() -> void:
 			float(config.rule_2_spawn_lifetime_sec),
 			false
 		)
+
+
+func _is_rule_2_enabled_for_team(team: int) -> bool:
+	if config == null:
+		return false
+	if team < 0 or team >= team_count:
+		return false
+
+	if available_skins.is_empty():
+		return true
+	var skin_idx: int = team % available_skins.size()
+	var skin := available_skins[skin_idx]
+	if skin == null:
+		return false
+
+	if skin.has_method("get") and bool(skin.get("rule_2_spawn_pressure_enabled")) == false:
+		return false
+
+	var enabled_types: PackedStringArray = config.rule_2_enabled_marble_types
+	if enabled_types.is_empty():
+		return true
+
+	var marble_type_name: String = ""
+	if skin.has_method("get"):
+		marble_type_name = str(skin.get("skin_name")).strip_edges().to_lower()
+	if marble_type_name == "":
+		marble_type_name = skin.resource_name.strip_edges().to_lower()
+	if marble_type_name == "" and skin.resource_path != "":
+		marble_type_name = skin.resource_path.get_file().get_basename().strip_edges().to_lower()
+	if marble_type_name == "":
+		return false
+
+	for type_name in enabled_types:
+		if marble_type_name == str(type_name).strip_edges().to_lower():
+			return true
+	return false
 
 
 func _get_leading_territory_ratio() -> float:
