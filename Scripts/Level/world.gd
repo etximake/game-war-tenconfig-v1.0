@@ -6,6 +6,7 @@ var marbles: Array[Marble] = []
 
 var tick_timer: Timer
 var bounds: StaticBody2D = null
+var territory_fx: TerritoryFXManager = null
 
 # GIỮ biến này để không phá scene, nhưng từ giờ sẽ sync theo config.num_teams
 @export_range(2, 10, 2) var team_count: int = 6
@@ -25,6 +26,7 @@ var bounds: StaticBody2D = null
 @onready var GridScene: PackedScene = preload("res://Scenes/Level/TerritoryGrid.tscn")
 @onready var MarbleScene: PackedScene = preload("res://Scenes/Marble/Marble.tscn")
 @onready var EscalationDirectorScript: Script = preload("res://Scripts/Systems/escalation_director.gd")
+@onready var TerritoryFXManagerScript: Script = preload("res://Scripts/Systems/territory_fx_manager.gd")
 
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
@@ -89,6 +91,7 @@ func start_match() -> void:
 	_edge_decay_ring = 0
 
 	_spawn_grid()
+	_spawn_territory_fx()
 	_prepare_capture_buffers()
 	_spawn_bounds()
 
@@ -437,7 +440,26 @@ func _apply_capture_pressure(pressure_map: Dictionary) -> void:
 		if cells.is_empty():
 			continue
 		grid.call("set_owner_cells_batch", cells, t)
+		_spawn_capture_fx_for_cells(cells, t)
 		_trigger_capture_squash_for_team(t)
+
+
+func _spawn_capture_fx_for_cells(cells: Array[Vector2i], team: int) -> void:
+	if not is_instance_valid(territory_fx):
+		return
+	if config == null:
+		return
+	if team < 0 or team >= config.team_colors.size():
+		return
+
+	var cs: float = float(config.grid_cell_size)
+	var half_cell := Vector2(cs * 0.5, cs * 0.5)
+	var color: Color = config.team_colors[team]
+
+	for cell in cells:
+		var local_pos: Vector2 = grid.call("cell_to_world", cell) + half_cell
+		var world_pos: Vector2 = grid.to_global(local_pos)
+		territory_fx.spawn_capture_fx(world_pos, color)
 
 
 func _trigger_capture_squash_for_team(team: int) -> void:
@@ -592,6 +614,10 @@ func _clear_previous_match() -> void:
 		bounds.queue_free()
 		bounds = null
 
+	if is_instance_valid(territory_fx):
+		territory_fx.queue_free()
+		territory_fx = null
+
 	if tick_timer and is_instance_valid(tick_timer):
 		tick_timer.queue_free()
 		tick_timer = null
@@ -630,6 +656,19 @@ func _spawn_grid() -> void:
 	grid = GridScene.instantiate()
 	add_child(grid)
 	grid.call("setup", config)
+
+
+func _spawn_territory_fx() -> void:
+	if is_instance_valid(territory_fx):
+		territory_fx.queue_free()
+
+	territory_fx = TerritoryFXManagerScript.new() as TerritoryFXManager
+	if territory_fx == null:
+		return
+
+	territory_fx.name = "TerritoryFX"
+	add_child(territory_fx)
+	territory_fx.configure_from_cell_size(float(config.grid_cell_size))
 
 
 func _spawn_bounds() -> void:
