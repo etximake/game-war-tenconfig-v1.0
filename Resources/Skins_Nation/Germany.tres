@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://ccnyd4msaqtpp"]
+
+[ext_resource type="Texture2D" uid="uid://btlrsv8l30u0b" path="res://Assets/Flag_Nation/Germany_circle_128x128.png" id="1_1cg6d"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_pyobc"]
+[ext_resource type="Texture2D" uid="uid://bilyy58jkw2fn" path="res://Assets/Weapon/Iicon_32_16.png" id="3_pyobc"]
+
+[resource]
+script = ExtResource("2_pyobc")
+skin_name = "Germany"
+core_texture = ExtResource("1_1cg6d")
+weapon_texture = ExtResource("3_pyobc")
+metadata/_custom_type_script = "uid://c402lff57jg35"

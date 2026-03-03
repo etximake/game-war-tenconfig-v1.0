@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MarbleSkin" load_steps=4 format=3 uid="uid://bnuahp5gcksa0"]
+
+[ext_resource type="Texture2D" uid="uid://bdide0mf7iidm" path="res://Assets/Flag_Nation/Norway_circle_128x128.png" id="1_ameal"]
+[ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_e83hh"]
+[ext_resource type="Texture2D" uid="uid://bnfl0b60nlpfp" path="res://Assets/Weapon/Iicon_32_08.png" id="3_o1ihb"]
+
+[resource]
+script = ExtResource("2_e83hh")
+skin_name = "Norway"
+core_texture = ExtResource("1_ameal")
+weapon_texture = ExtResource("3_o1ihb")
+metadata/_custom_type_script = "uid://c402lff57jg35"
