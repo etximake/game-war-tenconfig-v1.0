@@ -353,6 +353,45 @@ func set_team(new_team: int) -> void:
 	emit_signal("team_changed", self, new_team)
 
 
+func _is_territory_owner_blocked(owner: int) -> bool:
+	var is_neutral: bool = (owner < 0)
+	return (owner >= 0 and owner != team_id) or (territory_blocks_neutral and is_neutral)
+
+
+func _is_position_blocked_by_territory(pos: Vector2) -> bool:
+	if territory == null:
+		return false
+	if not territory.has_method("world_to_cell") or not territory.has_method("get_owner_cell"):
+		return false
+
+	# kiểm tra cả tâm + vòng biên core để dừng ở mép ngoài, không cho tâm lọt sâu vào lãnh thổ địch
+	var center_cell: Vector2i = territory.call("world_to_cell", pos)
+	var center_owner: int = int(territory.call("get_owner_cell", center_cell.x, center_cell.y))
+	if _is_territory_owner_blocked(center_owner):
+		return true
+
+	var probe_radius: float = max(_base_core_radius * size_scale * 0.92, 1.0)
+	var probe_dirs: Array[Vector2] = [
+		Vector2.RIGHT,
+		Vector2.LEFT,
+		Vector2.UP,
+		Vector2.DOWN,
+		Vector2(1.0, 1.0).normalized(),
+		Vector2(1.0, -1.0).normalized(),
+		Vector2(-1.0, 1.0).normalized(),
+		Vector2(-1.0, -1.0).normalized(),
+	]
+
+	for d in probe_dirs:
+		var probe_pos: Vector2 = pos + d * probe_radius
+		var probe_cell: Vector2i = territory.call("world_to_cell", probe_pos)
+		var probe_owner: int = int(territory.call("get_owner_cell", probe_cell.x, probe_cell.y))
+		if _is_territory_owner_blocked(probe_owner):
+			return true
+
+	return false
+
+
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if not SIM_RUNNING:
 		state.linear_velocity = Vector2.ZERO
@@ -361,27 +400,24 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		return
 
 	var v := _desired_velocity
-	# --- Territory block: core vào lãnh thổ team khác thì bật lại ---
+	# --- Territory block: chặn từ mép core, không cho tâm đi vào vùng cấm ---
 	if territory_block_enabled and territory != null and territory.has_method("world_to_cell") and territory.has_method("get_owner_cell"):
 		var pos: Vector2 = state.transform.origin
-		var cell: Vector2i = territory.call("world_to_cell", pos)
+		var dt: float = max(state.step, 1.0 / 240.0)
+		var predicted_pos: Vector2 = pos + v * dt
 
-		# world_to_cell bên TerritoryGrid đã clamp; nhưng vẫn an toàn:
-		var owner: int = int(territory.call("get_owner_cell", cell.x, cell.y))
-
-		var is_neutral: bool = (owner < 0)
-		var blocked: bool = (owner >= 0 and owner != team_id) or (territory_blocks_neutral and is_neutral)
+		var blocked_now: bool = _is_position_blocked_by_territory(pos)
+		var blocked_next: bool = _is_position_blocked_by_territory(predicted_pos)
+		var blocked: bool = blocked_now or blocked_next
 
 		if not blocked:
 			_last_safe_pos = pos
 			_has_safe_pos = true
 		else:
-			# đưa về vị trí an toàn trước đó
 			if _has_safe_pos:
 				state.transform = Transform2D(state.transform.get_rotation(), _last_safe_pos)
 
-			# phản xạ vận tốc theo hướng "đi vào vùng cấm"
-			var normal: Vector2 = (pos - _last_safe_pos)
+			var normal: Vector2 = (predicted_pos - _last_safe_pos)
 			if normal.length() < 0.001:
 				normal = -v
 			if normal.length() < 0.001:
@@ -393,7 +429,6 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 			else:
 				v = v.bounce(normal) * territory_bounce_factor
 
-			# tránh đâm lại liên tục
 			if v.length() > 0.001:
 				base_dir = v.normalized()
 				_move_dir = base_dir
