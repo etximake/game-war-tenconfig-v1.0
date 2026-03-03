@@ -13,6 +13,7 @@ func _ready() -> void:
 		return
 
 	_setup_fixed_camera(App.config)
+	_setup_hud_visual()
 	hud.visible = bool(App.config.show_hud)
 	set_process_unhandled_input(true)
 
@@ -66,6 +67,7 @@ func _next_preset() -> void:
 	if not App.next_preset_config():
 		return
 	_setup_fixed_camera(App.config)
+	_setup_hud_visual()
 	hud.visible = bool(App.config.show_hud)
 	_restart_match()
 
@@ -81,30 +83,62 @@ func _update_hud() -> void:
 	if not world:
 		return
 
-	var seed_text: String = "random" if int(App.config.rng_seed) == 0 else str(int(App.config.rng_seed))
+	#var seed_text: String = "Ranking marble:" if int(App.config.rng_seed) == 0 else str(int(App.config.rng_seed))
 	var lines: Array[String] = []
-	lines.append("Seed: %s | Preset: %s" % [seed_text, App.config.preset_name])
+	lines.append("Ranking marble:")
+	var team_names: Array = []
+	if world.has_method("get_team_display_names"):
+		team_names = world.call("get_team_display_names")
 
 	if world.has_method("get_territory_ratio_per_team") and world.has_method("get_alive_marbles_per_team"):
 		var ratios: Array = world.call("get_territory_ratio_per_team")
 		var alive: Array = world.call("get_alive_marbles_per_team")
 		for t in range(min(ratios.size(), alive.size())):
-			lines.append("T%d: %5.1f%% | %d marbles" % [t, float(ratios[t]) * 100.0, int(alive[t])])
+			var team_name: String = _resolve_team_name(t, team_names)
+			lines.append("%s: %5.1f%% | %d marbles" % [team_name, float(ratios[t]) * 100.0, int(alive[t])])
 
 	hud.text = "\n".join(lines)
 
 
+func _resolve_team_name(team_idx: int, team_names: Array) -> String:
+	if team_idx >= 0 and team_idx < team_names.size():
+		var candidate := str(team_names[team_idx]).strip_edges()
+		if candidate != "":
+			return candidate
+	return "Marble %d" % [team_idx + 1]
+
+
 func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -> void:
+	var team_names: Array = []
+	if world and world.has_method("get_team_display_names"):
+		team_names = world.call("get_team_display_names")
+	var team_name: String = _resolve_team_name(winner_team, team_names)
+
 	var msg := ""
 	if reason == "last_team_alive":
-		msg = "WIN: Team %d (last team alive)" % winner_team
+		msg = "WIN: %s (last team alive)" % team_name
 	elif reason == "territory_90":
-		msg = "WIN: Team %d (territory %.1f%%)" % [winner_team, territory_ratio * 100.0]
+		msg = "WIN: %s (territory %.1f%%)" % [team_name, territory_ratio * 100.0]
 	else:
-		msg = "WIN: Team %d" % winner_team
+		msg = "WIN: %s" % team_name
 
 	_update_hud()
 	hud.text += "\n" + msg
+
+
+func _setup_hud_visual() -> void:
+	if hud == null:
+		return
+	var settings := LabelSettings.new()
+	var font := SystemFont.new()
+	font.font_names = PackedStringArray(["Noto Sans", "Arial", "Segoe UI"])
+	font.font_weight = 700
+	settings.font = font
+	settings.font_color = Color.BLACK
+	settings.font_size = 20
+	settings.outline_size = 5
+	settings.outline_color = Color.WHITE
+	hud.label_settings = settings
 
 
 func _setup_fixed_camera(config: GameConfig) -> void:

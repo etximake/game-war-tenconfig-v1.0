@@ -14,6 +14,8 @@ var bounds: StaticBody2D = null
 
 # ✅ độ dày vệt paint theo tip (0: 1 cell, 1: 3 cell)
 @export_range(0, 1, 1) var paint_thickness: int = 1
+@export_range(0.0, 0.45, 0.01) var capture_inner_margin_ratio: float = 0.12
+@export_range(1, 12, 1) var capture_substeps_per_cell: int = 6
 
 @onready var GridScene: PackedScene = preload("res://Scenes/Level/TerritoryGrid.tscn")
 @onready var MarbleScene: PackedScene = preload("res://Scenes/Marble/Marble.tscn")
@@ -23,6 +25,7 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 signal match_ended(winner_team: int, reason: String, territory_ratio: float)
 var _last_tip_cell_by_id: Dictionary = {}  # key: instance_id, value: Vector2i
+var _last_tip_pos_by_id: Dictionary = {}
 
 var _match_over: bool = false
 @export var reset_delay: float = 2.0
@@ -213,32 +216,83 @@ func _draw() -> void:
 	
 func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
+	if config == null:
+		return cells
 
 	var tip_pos: Vector2 = m.get_weapon_tip_global_pos()
-	var cur: Vector2i = grid.call("world_to_cell", tip_pos)
-
 	var id := m.get_instance_id()
-	if _last_tip_cell_by_id.has(id):
-		var prev: Vector2i = _last_tip_cell_by_id[id]
-		# paint toàn bộ cell trên đoạn prev -> cur (không hở nét)
-		cells.append_array(_bresenham_cells(prev, cur))
-	else:
-		cells.append(cur)
+	var prev_pos: Vector2 = _last_tip_pos_by_id.get(id, tip_pos)
+	var cell_size: float = max(float(config.grid_cell_size), 1.0)
+	var sample_step: float = cell_size / float(max(capture_substeps_per_cell, 1))
+	var dist: float = prev_pos.distance_to(tip_pos)
+	var steps: int = max(1, int(ceil(dist / sample_step)))
 
-	_last_tip_cell_by_id[id] = cur
+	var seen: Dictionary = {}
+	var has_last_valid: bool = false
+	var last_valid_cell: Vector2i = Vector2i.ZERO
 
-	# optional thickness: thêm 2 ô lân cận để nét dày hơn
-	if paint_thickness > 0:
-		var v: Vector2 = m.linear_velocity
-		var dir: Vector2 = v.normalized() if v.length() > 0.001 else Vector2.RIGHT
-		if abs(dir.x) >= abs(dir.y):
-			cells.append(cur + Vector2i(0, 1))
-			cells.append(cur + Vector2i(0, -1))
+	for i in range(steps + 1):
+		var t: float = float(i) / float(steps)
+		var pnt: Vector2 = prev_pos.lerp(tip_pos, t)
+		var c: Vector2i = grid.call("world_to_cell", pnt)
+		if not _is_capture_point_valid(pnt, c):
+			continue
+
+		if has_last_valid:
+			var bridge: Array[Vector2i] = _bresenham_cells(last_valid_cell, c)
+			for bc in bridge:
+				_append_paint_brush_cells(bc, m.linear_velocity, cells, seen)
 		else:
-			cells.append(cur + Vector2i(1, 0))
-			cells.append(cur + Vector2i(-1, 0))
+			_append_paint_brush_cells(c, m.linear_velocity, cells, seen)
+
+		has_last_valid = true
+		last_valid_cell = c
+
+	var cur: Vector2i = grid.call("world_to_cell", tip_pos)
+	_last_tip_cell_by_id[id] = cur
+	_last_tip_pos_by_id[id] = tip_pos
 
 	return cells
+
+
+func _append_paint_brush_cells(center: Vector2i, velocity: Vector2, out_cells: Array[Vector2i], seen: Dictionary) -> void:
+	var key_center: String = "%d:%d" % [center.x, center.y]
+	if not seen.has(key_center):
+		seen[key_center] = true
+		out_cells.append(center)
+
+	if paint_thickness <= 0:
+		return
+
+	var dir: Vector2 = velocity.normalized() if velocity.length() > 0.001 else Vector2.RIGHT
+	var offsets: Array[Vector2i] = []
+	if abs(dir.x) >= abs(dir.y):
+		offsets = [Vector2i(0, 1), Vector2i(0, -1)]
+	else:
+		offsets = [Vector2i(1, 0), Vector2i(-1, 0)]
+
+	for off in offsets:
+		var c := center + off
+		var key: String = "%d:%d" % [c.x, c.y]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		out_cells.append(c)
+
+
+func _is_capture_point_valid(point: Vector2, cell: Vector2i) -> bool:
+	if config == null:
+		return false
+	if not _is_inside_play_rect(cell):
+		return false
+
+	var cs: float = max(float(config.grid_cell_size), 1.0)
+	var center: Vector2 = grid.call("cell_to_world", cell) + Vector2(cs * 0.5, cs * 0.5)
+	var radius: float = cs * (0.5 - clamp(capture_inner_margin_ratio, 0.0, 0.45))
+	var dist_to_center: float = point.distance_to(center)
+
+	return dist_to_center <= radius
+
 
 func _bresenham_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
@@ -439,6 +493,7 @@ func _clear_previous_match() -> void:
 	_rule_4_flash_cells.clear()
 	
 	_last_tip_cell_by_id.clear()
+	_last_tip_pos_by_id.clear()
 
 
 
@@ -654,6 +709,37 @@ func get_alive_marbles_per_team() -> Array[int]:
 	return alive
 
 
+func get_team_display_names() -> Array[String]:
+	var names: Array[String] = []
+	names.resize(team_count)
+	for t in range(team_count):
+		names[t] = _get_team_display_name(t)
+	return names
+
+
+func _get_team_display_name(team: int) -> String:
+	if team < 0:
+		return "Marble"
+
+	if not available_skins.is_empty():
+
+		var skin: MarbleSkin = available_skins[team % available_skins.size()]
+		if skin != null:
+			if skin.has_method("get"):
+				var skin_name := str(skin.get("skin_name")).strip_edges()
+				if skin_name != "":
+					return skin_name
+
+			var rn: String = String(skin.resource_name).strip_edges()
+			if rn != "":
+				return rn
+
+			if skin.resource_path != "":
+				return String(skin.resource_path).get_file().get_basename()
+
+	return "Marble %d" % [team + 1]
+
+
 func get_alive_team_count() -> int:
 	var alive := get_alive_marbles_per_team()
 	var c: int = 0
@@ -830,6 +916,8 @@ func _eliminate_marbles_outside_play_rect() -> void:
 			var id := m.get_instance_id()
 			if _last_tip_cell_by_id.has(id):
 				_last_tip_cell_by_id.erase(id)
+			if _last_tip_pos_by_id.has(id):
+				_last_tip_pos_by_id.erase(id)
 			m.queue_free()
 			marbles.remove_at(i)
 
