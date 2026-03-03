@@ -16,6 +16,11 @@ var bounds: StaticBody2D = null
 @export_range(0, 1, 1) var paint_thickness: int = 1
 @export_range(0.0, 0.45, 0.01) var capture_inner_margin_ratio: float = 0.12
 @export_range(1, 12, 1) var capture_substeps_per_cell: int = 6
+@export_range(0.1, 10.0, 0.1) var capture_pressure_per_tick: float = 1.0
+@export_range(0.5, 12.0, 0.5) var capture_threshold: float = 3.0
+@export_range(0.1, 6.0, 0.1) var capture_decay_per_tick: float = 0.8
+@export_range(0.5, 4.0, 0.1) var capture_line_pressure_bonus: float = 1.2
+@export_range(1, 8, 1) var capture_min_contact_samples: int = 2
 
 @onready var GridScene: PackedScene = preload("res://Scenes/Level/TerritoryGrid.tscn")
 @onready var MarbleScene: PackedScene = preload("res://Scenes/Marble/Marble.tscn")
@@ -26,6 +31,10 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 signal match_ended(winner_team: int, reason: String, territory_ratio: float)
 var _last_tip_cell_by_id: Dictionary = {}  # key: instance_id, value: Vector2i
 var _last_tip_pos_by_id: Dictionary = {}
+var _last_tip_team_by_id: Dictionary = {}
+
+var _capture_pending_team: PackedInt32Array = PackedInt32Array()
+var _capture_progress: PackedFloat32Array = PackedFloat32Array()
 
 var _match_over: bool = false
 @export var reset_delay: float = 2.0
@@ -80,6 +89,7 @@ func start_match() -> void:
 	_edge_decay_ring = 0
 
 	_spawn_grid()
+	_prepare_capture_buffers()
 	_spawn_bounds()
 
 	_load_preset_skins_from_config()
@@ -151,12 +161,7 @@ func _on_tick() -> void:
 	if marbles.is_empty():
 		return
 
-	# Godot 4.x: không dùng Array[Array[Vector2i]]
-	var paint_map: Array = []
-	paint_map.resize(team_count)
-	for t in range(team_count):
-		var a: Array[Vector2i] = []
-		paint_map[t] = a
+	var pressure_by_cell: Dictionary = {}
 
 	for m in marbles:
 		if not is_instance_valid(m):
@@ -166,21 +171,18 @@ func _on_tick() -> void:
 		if t < 0 or t >= team_count:
 			continue
 
-		var cells := _cells_to_paint_for_marble(m)
-		if not cells.is_empty():
-			var filtered_cells: Array[Vector2i] = []
-			for c in cells:
-				if _is_inside_play_rect(c):
-					filtered_cells.append(c)
-			if not filtered_cells.is_empty():
-				(paint_map[t] as Array[Vector2i]).append_array(filtered_cells)
-
-	# batch paint theo team, redraw 1 lần/team
-	for t in range(team_count):
-		var arr := paint_map[t] as Array[Vector2i]
-		if arr.is_empty():
+		var capture_map: Dictionary = _capture_pressure_map_for_marble(m)
+		if capture_map.is_empty():
 			continue
-		grid.call("set_owner_cells_batch", arr, t)
+
+		for idx_key in capture_map.keys():
+			var idx: int = int(idx_key)
+			var c: Vector2i = Vector2i(idx % int(config.grid_width), idx / int(config.grid_width))
+			if not _is_inside_play_rect(c):
+				continue
+			_add_capture_pressure(pressure_by_cell, c, t, float(capture_map[idx_key]))
+
+	_apply_capture_pressure(pressure_by_cell)
 
 	_match_time_sec += tick_timer.wait_time if tick_timer else (1.0 / max(config.tick_rate, 1.0))
 	_update_speed_state_timers()
@@ -214,54 +216,78 @@ func _draw() -> void:
 		draw_rect(rect.grow(2.0), Color(1.0, 1.0, 1.0, (0.35 + 0.60 * blink_strength) * alpha), false, 2.0)
 
 	
-func _cells_to_paint_for_marble(m: Marble) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
+	var pressure_map: Dictionary = {}
 	if config == null:
-		return cells
+		return pressure_map
 
 	var tip_pos: Vector2 = m.get_weapon_tip_global_pos()
 	var id := m.get_instance_id()
+	var current_team: int = int(m.team_id)
+	var prev_team: int = int(_last_tip_team_by_id.get(id, current_team))
 	var prev_pos: Vector2 = _last_tip_pos_by_id.get(id, tip_pos)
+	if prev_team != current_team:
+		prev_pos = tip_pos
+
 	var cell_size: float = max(float(config.grid_cell_size), 1.0)
 	var sample_step: float = cell_size / float(max(capture_substeps_per_cell, 1))
 	var dist: float = prev_pos.distance_to(tip_pos)
 	var steps: int = max(1, int(ceil(dist / sample_step)))
 
-	var seen: Dictionary = {}
-	var has_last_valid: bool = false
-	var last_valid_cell: Vector2i = Vector2i.ZERO
+	var center_hits: Dictionary = {}
+	var line_hits: Dictionary = {}
+	var has_last_cell: bool = false
+	var last_cell: Vector2i = Vector2i.ZERO
 
 	for i in range(steps + 1):
 		var t: float = float(i) / float(steps)
 		var pnt: Vector2 = prev_pos.lerp(tip_pos, t)
 		var c: Vector2i = grid.call("world_to_cell", pnt)
-		if not _is_capture_point_valid(pnt, c):
+		if not _is_inside_play_rect(c):
 			continue
 
-		if has_last_valid:
-			var bridge: Array[Vector2i] = _bresenham_cells(last_valid_cell, c)
-			for bc in bridge:
-				_append_paint_brush_cells(bc, m.linear_velocity, cells, seen)
-		else:
-			_append_paint_brush_cells(c, m.linear_velocity, cells, seen)
+		_add_cell_hit(center_hits, c, 1.0)
 
-		has_last_valid = true
-		last_valid_cell = c
+		if has_last_cell and c != last_cell:
+			var bridge: Array[Vector2i] = _bresenham_cells(last_cell, c)
+			for bc in bridge:
+				if not _is_inside_play_rect(bc):
+					continue
+				_add_cell_hit(line_hits, bc, 1.0)
+
+		has_last_cell = true
+		last_cell = c
+
+	for key in center_hits.keys():
+		var hits: float = float(center_hits[key])
+		if int(round(hits)) < capture_min_contact_samples:
+			continue
+		pressure_map[key] = hits
+
+	for key in line_hits.keys():
+		pressure_map[key] = float(pressure_map.get(key, 0.0)) + float(line_hits[key]) * capture_line_pressure_bonus
+
+	_apply_brush_to_pressure_map(pressure_map, m.linear_velocity)
 
 	var cur: Vector2i = grid.call("world_to_cell", tip_pos)
 	_last_tip_cell_by_id[id] = cur
 	_last_tip_pos_by_id[id] = tip_pos
+	_last_tip_team_by_id[id] = current_team
 
-	return cells
+	return pressure_map
 
 
-func _append_paint_brush_cells(center: Vector2i, velocity: Vector2, out_cells: Array[Vector2i], seen: Dictionary) -> void:
-	var key_center: String = "%d:%d" % [center.x, center.y]
-	if not seen.has(key_center):
-		seen[key_center] = true
-		out_cells.append(center)
+func _add_cell_hit(hit_map: Dictionary, cell: Vector2i, amount: float) -> void:
+	var idx: int = _cell_index(cell)
+	if idx < 0:
+		return
+	hit_map[idx] = float(hit_map.get(idx, 0.0)) + amount
 
+
+func _apply_brush_to_pressure_map(pressure_map: Dictionary, velocity: Vector2) -> void:
 	if paint_thickness <= 0:
+		return
+	if pressure_map.is_empty():
 		return
 
 	var dir: Vector2 = velocity.normalized() if velocity.length() > 0.001 else Vector2.RIGHT
@@ -271,27 +297,20 @@ func _append_paint_brush_cells(center: Vector2i, velocity: Vector2, out_cells: A
 	else:
 		offsets = [Vector2i(1, 0), Vector2i(-1, 0)]
 
-	for off in offsets:
-		var c := center + off
-		var key: String = "%d:%d" % [c.x, c.y]
-		if seen.has(key):
-			continue
-		seen[key] = true
-		out_cells.append(c)
+	var additions: Dictionary = {}
+	for key in pressure_map.keys():
+		var idx: int = int(key)
+		var x: int = idx % int(config.grid_width)
+		var y: int = idx / int(config.grid_width)
+		for off in offsets:
+			var nc := Vector2i(x + off.x, y + off.y)
+			var n_idx: int = _cell_index(nc)
+			if n_idx < 0:
+				continue
+			additions[n_idx] = float(additions.get(n_idx, 0.0)) + float(pressure_map[key]) * 0.55
 
-
-func _is_capture_point_valid(point: Vector2, cell: Vector2i) -> bool:
-	if config == null:
-		return false
-	if not _is_inside_play_rect(cell):
-		return false
-
-	var cs: float = max(float(config.grid_cell_size), 1.0)
-	var center: Vector2 = grid.call("cell_to_world", cell) + Vector2(cs * 0.5, cs * 0.5)
-	var radius: float = cs * (0.5 - clamp(capture_inner_margin_ratio, 0.0, 0.45))
-	var dist_to_center: float = point.distance_to(center)
-
-	return dist_to_center <= radius
+	for add_key in additions.keys():
+		pressure_map[add_key] = float(pressure_map.get(add_key, 0.0)) + float(additions[add_key])
 
 
 func _bresenham_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
@@ -320,6 +339,104 @@ func _bresenham_cells(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 			y0 += sy
 
 	return result
+
+
+func _prepare_capture_buffers() -> void:
+	if config == null:
+		return
+	var total_cells: int = int(config.grid_width * config.grid_height)
+	_capture_pending_team.resize(total_cells)
+	_capture_progress.resize(total_cells)
+	for i in range(total_cells):
+		_capture_pending_team[i] = -1
+		_capture_progress[i] = 0.0
+
+
+func _cell_index(cell: Vector2i) -> int:
+	if config == null:
+		return -1
+	if cell.x < 0 or cell.y < 0:
+		return -1
+	if cell.x >= int(config.grid_width) or cell.y >= int(config.grid_height):
+		return -1
+	return int(cell.y) * int(config.grid_width) + int(cell.x)
+
+
+func _add_capture_pressure(pressure_map: Dictionary, cell: Vector2i, team: int, amount: float) -> void:
+	var idx: int = _cell_index(cell)
+	if idx < 0:
+		return
+
+	if not pressure_map.has(idx):
+		pressure_map[idx] = {}
+	var by_team: Dictionary = pressure_map[idx]
+	by_team[team] = float(by_team.get(team, 0.0)) + amount
+	pressure_map[idx] = by_team
+
+
+func _apply_capture_pressure(pressure_map: Dictionary) -> void:
+	if config == null:
+		return
+	if not is_instance_valid(grid):
+		return
+
+	var changed_cells_by_team: Array = []
+	changed_cells_by_team.resize(team_count)
+	for t in range(team_count):
+		var team_cells: Array[Vector2i] = []
+		changed_cells_by_team[t] = team_cells
+
+	for idx_key in pressure_map.keys():
+		var idx: int = int(idx_key)
+		var team_pressure: Dictionary = pressure_map[idx]
+		if team_pressure.is_empty():
+			continue
+
+		var strongest_team: int = -1
+		var strongest_pressure: float = 0.0
+		for t_key in team_pressure.keys():
+			var t: int = int(t_key)
+			var p: float = float(team_pressure[t_key])
+			if p > strongest_pressure:
+				strongest_pressure = p
+				strongest_team = t
+
+		if strongest_team < 0:
+			continue
+
+		var x: int = idx % int(config.grid_width)
+		var y: int = idx / int(config.grid_width)
+		var owner: int = int(grid.call("get_owner_cell", x, y))
+
+		if owner == strongest_team:
+			_capture_pending_team[idx] = -1
+			_capture_progress[idx] = 0.0
+			continue
+
+		var pending_team: int = _capture_pending_team[idx]
+		var progress: float = _capture_progress[idx]
+
+		if pending_team != strongest_team:
+			progress -= capture_decay_per_tick
+			if progress <= 0.0:
+				pending_team = strongest_team
+				progress = 0.0
+
+		progress += strongest_pressure * capture_pressure_per_tick
+
+		if progress >= capture_threshold:
+			(changed_cells_by_team[strongest_team] as Array[Vector2i]).append(Vector2i(x, y))
+			_capture_pending_team[idx] = -1
+			_capture_progress[idx] = 0.0
+		else:
+			_capture_pending_team[idx] = pending_team
+			_capture_progress[idx] = progress
+
+	for t in range(team_count):
+		var cells := changed_cells_by_team[t] as Array[Vector2i]
+		if cells.is_empty():
+			continue
+		grid.call("set_owner_cells_batch", cells, t)
 
 
 
@@ -494,6 +611,9 @@ func _clear_previous_match() -> void:
 	
 	_last_tip_cell_by_id.clear()
 	_last_tip_pos_by_id.clear()
+	_last_tip_team_by_id.clear()
+	_capture_pending_team = PackedInt32Array()
+	_capture_progress = PackedFloat32Array()
 
 
 
@@ -918,6 +1038,8 @@ func _eliminate_marbles_outside_play_rect() -> void:
 				_last_tip_cell_by_id.erase(id)
 			if _last_tip_pos_by_id.has(id):
 				_last_tip_pos_by_id.erase(id)
+			if _last_tip_team_by_id.has(id):
+				_last_tip_team_by_id.erase(id)
 			m.queue_free()
 			marbles.remove_at(i)
 

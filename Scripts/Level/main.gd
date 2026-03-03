@@ -135,9 +135,9 @@ func _setup_hud_visual() -> void:
 	font.font_weight = 700
 	settings.font = font
 	settings.font_color = Color.BLACK
-	settings.font_size = 20
-	settings.outline_size = 5
-	settings.outline_color = Color.WHITE
+	settings.font_size = 16
+	settings.outline_size = 3
+	settings.outline_color = Color.GRAY
 	hud.label_settings = settings
 
 
