@@ -7,6 +7,15 @@ class_name Marble
 # =========================
 var team_id: int = 0
 var move_speed: float = 320.0
+var speed: float:
+	get:
+		return move_speed
+	set(value):
+		move_speed = value
+@export var accel: float = 2200.0
+@export var max_turn_rate: float = 7.5
+@export var squash_strength: float = 0.08
+@export var squash_time: float = 0.12
 var weapon_rotate_speed: float = 8.0
 var kill_count: int = 0
 
@@ -56,6 +65,9 @@ var territory: Node = null
 # internal movement state
 var _move_dir: Vector2 = Vector2.RIGHT
 var _desired_velocity: Vector2 = Vector2.ZERO
+var _current_velocity: Vector2 = Vector2.ZERO
+var _prev_target_dir: Vector2 = Vector2.RIGHT
+var _turn_squash_cooldown_left: float = 0.0
 
 var _bias_timer: float = 0.0
 var _cached_bias_dir: Vector2 = Vector2.ZERO
@@ -95,6 +107,15 @@ var _base_weapon_sprite_scale: Vector2 = Vector2.ONE
 
 var _last_safe_pos: Vector2 = Vector2.ZERO
 var _has_safe_pos: bool = false
+var _turn_squash_tween: Tween = null
+var _capture_squash_tween: Tween = null
+var _visual_scale_mult_value: Vector2 = Vector2.ONE
+var _visual_scale_mult: Vector2:
+	get:
+		return _visual_scale_mult_value
+	set(value):
+		_visual_scale_mult_value = value
+		_apply_visual_scale_multiplier()
 
 
 # Optional skin resource
@@ -110,6 +131,7 @@ func _ready() -> void:
 	_last_safe_pos = global_position
 	_has_safe_pos = true
 	_base_move_speed = move_speed
+	speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
 
 	if core_shape and core_shape.shape:
@@ -125,6 +147,8 @@ func _ready() -> void:
 
 	_randomize_base_dir()
 	_move_dir = base_dir
+	_prev_target_dir = _move_dir
+	_current_velocity = _move_dir * move_speed
 	_reset_dir_timer()
 	_bias_timer = 0.0
 	_wall_cooldown = 0.0
@@ -158,12 +182,15 @@ func _physics_process(delta: float) -> void:
 
 	# Nếu chưa start -> đứng yên, không update AI dir/bias
 	if not SIM_RUNNING:
+		_current_velocity = _current_velocity.move_toward(Vector2.ZERO, accel * delta)
 		_desired_velocity = Vector2.ZERO
 		_update_skin_label_position()
 		return
 
 	if _wall_cooldown > 0.0:
 		_wall_cooldown = max(_wall_cooldown - delta, 0.0)
+	if _turn_squash_cooldown_left > 0.0:
+		_turn_squash_cooldown_left = max(_turn_squash_cooldown_left - delta, 0.0)
 	if _temp_boost_left_sec > 0.0:
 		_temp_boost_left_sec = max(_temp_boost_left_sec - delta, 0.0)
 		if _temp_boost_left_sec <= 0.0:
@@ -185,10 +212,24 @@ func _physics_process(delta: float) -> void:
 		target_dir = base_dir
 	target_dir = target_dir.normalized()
 
-	var t: float = clamp(turn_speed * delta, 0.0, 1.0)
-	_move_dir = _move_dir.slerp(target_dir, t).normalized()
+	var current_dir: Vector2 = _move_dir if _move_dir.length() > 0.001 else target_dir
+	var angle_delta: float = wrapf(target_dir.angle() - current_dir.angle(), -PI, PI)
+	var max_step: float = maxf(max_turn_rate, 0.01) * delta
+	var turn_step: float = clampf(angle_delta, -max_step, max_step)
+	_move_dir = current_dir.rotated(turn_step).normalized()
 
-	_desired_velocity = _move_dir * move_speed
+	var sharp_turn_ratio: float = absf(angle_delta) / PI
+	var eased_speed_ratio: float = lerpf(1.0, 0.82, smoothstep(0.35, 1.0, sharp_turn_ratio))
+	var desired_velocity: Vector2 = _move_dir * move_speed * eased_speed_ratio
+	_current_velocity = _current_velocity.move_toward(desired_velocity, maxf(accel, 1.0) * delta)
+	_desired_velocity = _current_velocity
+
+	var target_changed: bool = _prev_target_dir.dot(target_dir) < 0.90
+	var is_hard_turn: bool = absf(angle_delta) > 0.40 and absf(turn_step) >= max_step * 0.8
+	if (target_changed or is_hard_turn) and _turn_squash_cooldown_left <= 0.0:
+		_play_turn_squash()
+		_turn_squash_cooldown_left = clampf(squash_time * 0.65, 0.05, 0.12)
+	_prev_target_dir = target_dir
 	_update_skin_label_position()
 
 
@@ -309,6 +350,7 @@ func _on_weapon_area_entered(area: Area2D) -> void:
 
 func cache_base_speed() -> void:
 	_base_move_speed = move_speed
+	speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
 	_external_speed_mult = 1.0
 	_temp_boost_mult = 1.0
@@ -342,7 +384,7 @@ func _apply_random_direction_offset(angle_min_deg: float, angle_max_deg: float) 
 
 func _recompute_speed() -> void:
 	var final_mult: float = max(_external_speed_mult * _temp_boost_mult, 0.01)
-	move_speed = _base_move_speed * final_mult
+	move_speed = speed * final_mult
 	weapon_rotate_speed = _base_weapon_rotate_speed * final_mult
 
 
@@ -450,6 +492,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		v = v.normalized() * move_speed
 
 	state.linear_velocity = v
+	_current_velocity = v
 
 
 # ✅ B-1 getter: dùng cho World tick paint theo tip
@@ -487,6 +530,7 @@ func apply_size_scale() -> void:
 		core_sprite.scale = _base_core_sprite_scale * s
 	if weapon_sprite:
 		weapon_sprite.scale = _base_weapon_sprite_scale * s
+	_apply_visual_scale_multiplier()
 
 	_apply_no_tint_visuals()
 	_update_skin_label_position()
@@ -520,6 +564,45 @@ func _apply_no_tint_visuals() -> void:
 		core_sprite.modulate = Color.WHITE
 	if weapon_sprite:
 		weapon_sprite.modulate = Color.WHITE
+
+
+func trigger_capture_squash() -> void:
+	_play_capture_squash()
+
+
+func _play_turn_squash() -> void:
+	if not is_inside_tree():
+		return
+	if _turn_squash_tween != null and _turn_squash_tween.is_valid():
+		_turn_squash_tween.kill()
+	var strength_ratio: float = clampf(squash_strength / 0.08, 0.0, 2.0)
+	var stretch: float = lerpf(1.0, 1.08, strength_ratio)
+	var squish: float = lerpf(1.0, 0.92, strength_ratio)
+	_visual_scale_mult = Vector2(stretch, squish)
+	_turn_squash_tween = create_tween()
+	_turn_squash_tween.set_trans(Tween.TRANS_QUAD)
+	_turn_squash_tween.set_ease(Tween.EASE_OUT)
+	_turn_squash_tween.tween_property(self, "_visual_scale_mult", Vector2.ONE, clamp(squash_time, 0.10, 0.16))
+
+
+func _play_capture_squash() -> void:
+	if not is_inside_tree():
+		return
+	if _capture_squash_tween != null and _capture_squash_tween.is_valid():
+		_capture_squash_tween.kill()
+	_visual_scale_mult = Vector2(1.06, 1.06)
+	_capture_squash_tween = create_tween()
+	_capture_squash_tween.set_trans(Tween.TRANS_BACK)
+	_capture_squash_tween.set_ease(Tween.EASE_OUT)
+	_capture_squash_tween.tween_property(self, "_visual_scale_mult", Vector2.ONE, clamp(squash_time * 0.8, 0.08, 0.12))
+
+
+func _apply_visual_scale_multiplier() -> void:
+	var s: float = size_scale
+	if core_sprite:
+		core_sprite.scale = _base_core_sprite_scale * s * _visual_scale_mult_value
+	if weapon_sprite:
+		weapon_sprite.scale = _base_weapon_sprite_scale * s * _visual_scale_mult_value
 
 
 # ✅ FIX SKIN: Resource -> truy cập field trực tiếp (không dùng "in")

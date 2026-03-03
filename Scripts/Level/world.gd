@@ -437,7 +437,16 @@ func _apply_capture_pressure(pressure_map: Dictionary) -> void:
 		if cells.is_empty():
 			continue
 		grid.call("set_owner_cells_batch", cells, t)
+		_trigger_capture_squash_for_team(t)
 
+
+func _trigger_capture_squash_for_team(team: int) -> void:
+	for m in marbles:
+		if not is_instance_valid(m):
+			continue
+		if int(m.team_id) != team:
+			continue
+		m.trigger_capture_squash()
 
 
 func _check_win_conditions() -> void:
