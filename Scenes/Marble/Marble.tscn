@@ -1,7 +1,8 @@
-[gd_scene load_steps=8 format=3 uid="uid://dmgnh27njbn5h"]
+[gd_scene load_steps=9 format=3 uid="uid://dmgnh27njbn5h"]
 
 [ext_resource type="Script" uid="uid://4kibmowkynq" path="res://Scripts/Marble/marble.gd" id="1_3mo50"]
 [ext_resource type="Texture2D" uid="uid://bi1eyfmgk3ahw" path="res://Assets/Flag_US/Alabama_round.png" id="2_7mvxq"]
+[ext_resource type="Script" uid="uid://dj74u8t8c6nld" path="res://Scripts/Marble/MarbleCoreFX.gd" id="2_52w8h"]
 [ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_7mvxq"]
 
 [sub_resource type="SystemFont" id="SystemFont_7mvxq"]
@@ -18,7 +19,7 @@ outline_color = Color(0, 0, 0, 1)
 radius = 65.06919
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_qupxx"]
-size = Vector2(20, 125)
+size = Vector2(20, 119)
 
 [node name="Marble" type="RigidBody2D"]
 texture_filter = 1
@@ -26,7 +27,6 @@ gravity_scale = 0.0
 contact_monitor = true
 max_contacts_reported = 4
 script = ExtResource("1_3mo50")
-bias_strength = 0.0
 
 [node name="Name" type="Label" parent="."]
 offset_right = 40.0
@@ -42,6 +42,9 @@ shape = SubResource("CircleShape2D_evll6")
 texture_filter = 1
 texture = ExtResource("2_7mvxq")
 
+[node name="CoreFX" type="Node2D" parent="."]
+script = ExtResource("2_52w8h")
+
 [node name="WeaponPivot" type="Node2D" parent="."]
 texture_filter = 1
 metadata/_edit_group_ = true
@@ -54,7 +57,7 @@ position = Vector2(0, -140)
 
 [node name="WeaponShape" type="CollisionShape2D" parent="WeaponPivot/Weapon"]
 texture_filter = 1
-position = Vector2(0, 15.5)
+position = Vector2(0, 18.5)
 shape = SubResource("RectangleShape2D_qupxx")
 
 [node name="WeaponSprite" type="Sprite2D" parent="WeaponPivot/Weapon"]
