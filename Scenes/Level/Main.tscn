@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://b4emorq00844p" path="res://Scripts/Level/main.gd" id="1_6lraq"]
 [ext_resource type="Script" uid="uid://dqgr8v8btj2sq" path="res://Scripts/Level/world.gd" id="1_isv4o"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="3_htilh"]
-[ext_resource type="Resource" uid="uid://rxhns2xea0hs" path="res://Resources/Skins_USA/New York.tres" id="4_fbwek"]
-[ext_resource type="Resource" uid="uid://toui7e5f43qq" path="res://Resources/Skins_USA/Hawaii.tres" id="5_pcup4"]
+[ext_resource type="Resource" uid="uid://ccnyd4msaqtpp" path="res://Resources/Skins_Nation/Germany.tres" id="5_fbwek"]
+[ext_resource type="Resource" uid="uid://ddlfhy2iqmc2l" path="res://Resources/Skins_Nation/Brazil.tres" id="5_pcup4"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_6lraq")
@@ -13,7 +13,7 @@ script = ExtResource("1_6lraq")
 texture_filter = 1
 script = ExtResource("1_isv4o")
 team_count = 2
-available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("5_pcup4")])
+available_skins = Array[ExtResource("3_htilh")]([ExtResource("5_pcup4"), ExtResource("5_fbwek")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
 
