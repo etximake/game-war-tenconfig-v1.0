@@ -59,6 +59,14 @@ var _speed_rain_zones: Array[Dictionary] = []
 var _mini_swarm_ids: Dictionary = {}
 var _rule_4_flash_cells: Array[Dictionary] = []
 
+var _tick_accumulator: float = 0.0
+
+# ===== Performance vars =====
+var _win_check_timer: float = 0.0            # throttle win-condition check
+var _owned_cells_cache: Dictionary = {}      # team -> Array[Vector2i]
+var _owned_cells_cache_time: float = -999.0  # _match_time_sec when cache was built
+var _pressure_by_cell_reuse: Dictionary = {} # résuse dict, cleared each capture tick
+var _redraw_needed: bool = false             # flag để gọi queue_redraw đúng lúc
 
 func start_match() -> void:
 	print("World.start_match() called")
@@ -120,6 +128,18 @@ func _physics_process(_delta: float) -> void:
 		return
 	_update_speed_rain(_delta)
 
+	if not _match_over and not marbles.is_empty() and is_instance_valid(grid):
+		if config != null:
+			var interval: float = 1.0 / max(float(config.tick_rate), 1.0)
+			_tick_accumulator += _delta
+			if _tick_accumulator >= interval:
+				# Để tránh bị chạy dồn dập (catch-up death spiral), ta chỉ trừ interval hoặc tick 1 lần
+				var ticks_to_do: int = int(_tick_accumulator / interval)
+				_tick_accumulator -= float(ticks_to_do) * interval
+				# Limit tick_to_do to 1 per physics frame to prevent freezing on lag spikes (slowmo instead)
+				_process_capture_pressure(interval * float(ticks_to_do))
+		else:
+			_process_capture_pressure(_delta)
 
 func _process(_delta: float) -> void:
 	# Giữ hiệu ứng blink của Rule 3 + Rule 4 animate rõ ràng theo frame.
@@ -141,30 +161,23 @@ func _setup_escalation_director() -> void:
 
 
 # =========================
-# Step 7 (B-3): Tick paint theo WEAPON TIP + batch (B-2)
+# Bỏ TickTimer, thay bằng physics_process để quét mượt mà
 # =========================
 func _setup_tick_timer() -> void:
 	if tick_timer and is_instance_valid(tick_timer):
 		tick_timer.queue_free()
-
-	tick_timer = Timer.new()
-	tick_timer.name = "TickTimer"
-	tick_timer.one_shot = false
-	tick_timer.autostart = true
-	tick_timer.wait_time = 1.0 / float(config.tick_rate)
-	add_child(tick_timer)
-
-	tick_timer.timeout.connect(_on_tick)
+		tick_timer = null
 
 
-# Hook trung tâm 1: theo thời gian (tick timer)
-func _on_tick() -> void:
+# Hook trung tâm 1: theo thời gian thật mượt mà từng physical frame (thay cho TickTimer)
+func _process_capture_pressure(delta: float) -> void:
 	if not is_instance_valid(grid):
 		return
 	if marbles.is_empty():
 		return
 
-	var pressure_by_cell: Dictionary = {}
+	# Tái sử dụng dict thay vì tạo mới mỗi frame (giảm GC pressure)
+	_pressure_by_cell_reuse.clear()
 
 	for m in marbles:
 		if not is_instance_valid(m):
@@ -183,14 +196,17 @@ func _on_tick() -> void:
 			var c: Vector2i = Vector2i(idx % int(config.grid_width), idx / int(config.grid_width))
 			if not _is_inside_play_rect(c):
 				continue
-			_add_capture_pressure(pressure_by_cell, c, t, float(capture_map[idx_key]))
+			_add_capture_pressure(_pressure_by_cell_reuse, c, t, float(capture_map[idx_key]))
 
-	_apply_capture_pressure(pressure_by_cell)
+	_apply_capture_pressure(_pressure_by_cell_reuse)
 
-	_match_time_sec += tick_timer.wait_time if tick_timer else (1.0 / max(config.tick_rate, 1.0))
+	_match_time_sec += delta
 	_update_speed_state_timers()
 
-	if not _match_over:
+	# Throttle win-condition: kiểm tra mỗi 0.5s thay vì mỗi frame (tiết kiệm O(W×H))
+	_win_check_timer += delta
+	if not _match_over and _win_check_timer >= 0.5:
+		_win_check_timer = 0.0
 		_check_win_conditions()
 
 
@@ -229,13 +245,17 @@ func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
 	var current_team: int = int(m.team_id)
 	var prev_team: int = int(_last_tip_team_by_id.get(id, current_team))
 	var prev_pos: Vector2 = _last_tip_pos_by_id.get(id, tip_pos)
-	if prev_team != current_team:
-		prev_pos = tip_pos
 
 	var cell_size: float = max(float(config.grid_cell_size), 1.0)
 	var sample_step: float = cell_size / float(max(capture_substeps_per_cell, 1))
 	var dist: float = prev_pos.distance_to(tip_pos)
 	var steps: int = max(1, int(ceil(dist / sample_step)))
+
+	# Prevent painting far ahead if marble is blocked by territory
+	if m.has_method("_is_position_blocked_by_territory"):
+		if m.call("_is_position_blocked_by_territory", tip_pos):
+			# If the current tip is in blocked territory, reduce its influence
+			steps = min(steps, 1)
 
 	var center_hits: Dictionary = {}
 	var line_hits: Dictionary = {}
@@ -261,16 +281,23 @@ func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
 		has_last_cell = true
 		last_cell = c
 
+	var power_mult: float = 1.0
+	if "capture_power_mult" in m:
+		power_mult = float(m.get("capture_power_mult"))
+
 	for key in center_hits.keys():
 		var hits: float = float(center_hits[key])
 		if int(round(hits)) < capture_min_contact_samples:
 			continue
-		pressure_map[key] = hits
+		pressure_map[key] = hits * power_mult
 
 	for key in line_hits.keys():
-		pressure_map[key] = float(pressure_map.get(key, 0.0)) + float(line_hits[key]) * capture_line_pressure_bonus
+		pressure_map[key] = float(pressure_map.get(key, 0.0)) + float(line_hits[key]) * capture_line_pressure_bonus * power_mult
 
-	_apply_brush_to_pressure_map(pressure_map, m.linear_velocity)
+	var sweep_dir := (tip_pos - prev_pos)
+	if sweep_dir.length() < 0.001:
+		sweep_dir = m.linear_velocity
+	_apply_brush_to_pressure_map(pressure_map, sweep_dir)
 
 	var cur: Vector2i = grid.call("world_to_cell", tip_pos)
 	_last_tip_cell_by_id[id] = cur
@@ -287,13 +314,13 @@ func _add_cell_hit(hit_map: Dictionary, cell: Vector2i, amount: float) -> void:
 	hit_map[idx] = float(hit_map.get(idx, 0.0)) + amount
 
 
-func _apply_brush_to_pressure_map(pressure_map: Dictionary, velocity: Vector2) -> void:
+func _apply_brush_to_pressure_map(pressure_map: Dictionary, sweep_dir: Vector2) -> void:
 	if paint_thickness <= 0:
 		return
 	if pressure_map.is_empty():
 		return
 
-	var dir: Vector2 = velocity.normalized() if velocity.length() > 0.001 else Vector2.RIGHT
+	var dir: Vector2 = sweep_dir.normalized() if sweep_dir.length() > 0.001 else Vector2.RIGHT
 	var offsets: Array[Vector2i] = []
 	if abs(dir.x) >= abs(dir.y):
 		offsets = [Vector2i(0, 1), Vector2i(0, -1)]
@@ -570,31 +597,6 @@ func force_end_run() -> void:
 	_end_match(best_team, "manual_end_run", ratio)
 
 
-# =========================
-# GIỮ NGUYÊN: capture cũ (không dùng nữa)
-# =========================
-func _capture_for_marble(m: Marble, radius_cells: int, radius_px: float) -> bool:
-	var team: int = int(m.team_id)
-	var center_cell: Vector2i = grid.call("world_to_cell", m.global_position)
-
-	var changed: bool = false
-	var cs: float = float(config.grid_cell_size)
-
-	for dy in range(-radius_cells, radius_cells + 1):
-		for dx in range(-radius_cells, radius_cells + 1):
-			var c := Vector2i(center_cell.x + dx, center_cell.y + dy)
-			var world_pos: Vector2 = grid.call("cell_to_world", c)
-			var cell_center: Vector2 = world_pos + Vector2(cs * 0.5, cs * 0.5)
-
-			if cell_center.distance_to(m.global_position) > radius_px:
-				continue
-
-			var current_owner: int = int(grid.call("get_owner_cell", c.x, c.y))
-			if current_owner != team:
-				grid.call("set_owner_cell", c.x, c.y, team, false)
-				changed = true
-
-	return changed
 
 
 # =========================
@@ -649,6 +651,11 @@ func _clear_previous_match() -> void:
 	_last_tip_team_by_id.clear()
 	_capture_pending_team = PackedInt32Array()
 	_capture_progress = PackedFloat32Array()
+	# Reset performance vars
+	_win_check_timer = 0.0
+	_owned_cells_cache.clear()
+	_owned_cells_cache_time = -999.0
+	_pressure_by_cell_reuse.clear()
 
 
 
@@ -788,40 +795,43 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 
 			marbles.append(m)
 			m.team_changed.connect(_on_marble_team_changed)
+			if m.has_signal("marble_stuck"):
+				m.marble_stuck.connect(_on_marble_stuck)
 
 
-# =========================
-# GIỮ NGUYÊN: spawn cũ (1 per region) (không dùng nữa)
-# =========================
-func _spawn_one_marble_per_region(n: int) -> void:
-	var regions := _build_regions_in_cells(n)
-	var cs: float = float(config.grid_cell_size)
+func _on_marble_stuck(node: Marble, pos: Vector2, team: int, is_stuck: bool) -> void:
+	if not is_stuck:
+		return
+	
+	# Clearance rescue: Clear a small area around the stuck marble to help it escape
+	if is_instance_valid(grid):
+		var center_cell: Vector2i = grid.call("world_to_cell", pos)
+		var clear_radius: int = 2 # 5x5 area
+		var cells_to_clear: Array[Vector2i] = []
+		for dy in range(-clear_radius, clear_radius + 1):
+			for dx in range(-clear_radius, clear_radius + 1):
+				var target_c := center_cell + Vector2i(dx, dy)
+				if _is_inside_play_rect(target_c):
+					cells_to_clear.append(target_c)
+		
+		if not cells_to_clear.is_empty():
+			grid.call("set_owner_cells_batch", cells_to_clear, team)
+			_spawn_capture_fx_for_cells(cells_to_clear, team)
 
-	for team in range(n):
-		var rect: Rect2i = regions[team]
-		var cx: int = rect.position.x + int(floor(float(rect.size.x) * 0.5))
-		var cy: int = rect.position.y + int(floor(float(rect.size.y) * 0.5))
-		var pos: Vector2 = grid.call("cell_to_world", Vector2i(cx, cy))
-		pos += Vector2(cs * 0.5, cs * 0.5)
+	# Teammate rescue: teammates swim towards the SOS signal
+	for m in marbles:
+		if not is_instance_valid(m) or m == node:
+			continue
+		if int(m.team_id) == team:
+			var dir := (pos - m.global_position).normalized()
+			if dir.length() > 0.001:
+				if "base_dir" in m:
+					m.set("base_dir", dir)
+				if "_move_dir" in m:
+					m.set("_move_dir", dir)
+				# Boost speed so teammates actually move fast towards the stuck one
+				m.apply_temp_speed_boost(1.5, 2.0, false, 0.0, 0.0)
 
-		var m := MarbleScene.instantiate() as Marble
-		add_child(m)
-		m.position = pos
-
-		m.team_id = clamp(team, 0, team_count - 1)
-		m.move_speed = float(config.move_speed)
-		m.weapon_rotate_speed = float(config.weapon_rotate_speed)
-		m.size_scale = float(config.initial_size_scale)
-		m.cache_base_speed()
-
-		m.territory = grid
-
-		if available_skins.size() > 0:
-			var skin_idx: int = team % available_skins.size()
-			m.apply_skin(available_skins[skin_idx])
-
-		marbles.append(m)
-		m.team_changed.connect(_on_marble_team_changed)
 
 
 # Hook trung tâm 2: marble đổi team
@@ -834,6 +844,12 @@ func _on_marble_team_changed(marble: Marble, new_team: int) -> void:
 		return
 	var idx := safe_team % available_skins.size()
 	marble.apply_skin(available_skins[idx])
+
+	# Flush tip tracking
+	var id := marble.get_instance_id()
+	_last_tip_pos_by_id.erase(id)
+	_last_tip_team_by_id.erase(id)
+	_last_tip_cell_by_id.erase(id)
 
 
 func _update_speed_state_timers() -> void:
@@ -1178,6 +1194,9 @@ func _get_team_spawn_anchor(team: int) -> Vector2:
 
 
 func _get_owned_cells_for_team(team: int) -> Array[Vector2i]:
+	# Cache: chỉ rebuild nếu cache cũ hơn 0.3s (tránh O(W×H) mỗi lần spawn escalation)
+	if _owned_cells_cache.has(team) and (_match_time_sec - _owned_cells_cache_time) < 0.3:
+		return _owned_cells_cache[team]
 	var cells: Array[Vector2i] = []
 	if not is_instance_valid(grid) or config == null:
 		return cells
@@ -1185,6 +1204,8 @@ func _get_owned_cells_for_team(team: int) -> Array[Vector2i]:
 		for x in range(config.grid_width):
 			if int(grid.call("get_owner_cell", x, y)) == team:
 				cells.append(Vector2i(x, y))
+	_owned_cells_cache[team] = cells
+	_owned_cells_cache_time = _match_time_sec
 	return cells
 
 
@@ -1284,7 +1305,7 @@ func _update_speed_rain(delta: float) -> void:
 			continue
 		_rule_4_flash_cells[i] = flash
 
-	queue_redraw()
+	# queue_redraw() được xử lý bởi _process() ở render rate – không gọi lại ở physics rate
 
 
 func rule_infinite_spawn_tick() -> void:
