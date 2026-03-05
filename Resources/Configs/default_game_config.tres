@@ -7,11 +7,13 @@
 script = ExtResource("1")
 num_teams = 6
 tick_rate = 70.0
-team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 0.5, 0, 1)])
+team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 0.5, 0, 1)])
 grid_cell_size = 24
 move_speed = 170.0
 weapon_rotate_speed = 4.0
 growth_step = 0.0
+combat_bias_strength = 0.7
+combat_sample_radius = 3
 marbles_per_team = 2
 participant_rules_enabled = false
 participant_team_size_mult = PackedFloat32Array(2.5, 0.4)

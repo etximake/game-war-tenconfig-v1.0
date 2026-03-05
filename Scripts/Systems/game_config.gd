@@ -38,6 +38,8 @@ class_name GameConfig
 @export var growth_step: float = 0.08
 @export var max_size_scale: float = 2.2
 @export var capture_radius: float = 72.0
+@export var combat_bias_strength: float = 0.9
+@export var combat_sample_radius: int = 6
 
 # =========================
 # spawn

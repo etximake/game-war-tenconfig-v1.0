@@ -1,7 +1,7 @@
 extends Node2D
 
 const OUTLINE_THICKNESS: float = 0.065
-const OUTLINE_COLOR: Color = Color(1.0, 1.0, 1.0, 1.0)
+const OUTLINE_COLOR: Color = Color(0.0, 0.0, 0.0, 1.0)
 const TEAM_TINT_STRENGTH: float = 0.0
 
 var _marble: Marble

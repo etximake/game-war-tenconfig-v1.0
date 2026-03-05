@@ -2,7 +2,7 @@ extends Node2D
 
 @onready var world: Node = $World
 @onready var cam: Camera2D = $Camera2D
-@onready var hud: Label = $UI/HUD
+@onready var hud: Control = $UI/HUD # Changed to Control to support Label or RichTextLabel
 
 var _hud_timer: float = 0.0
 
@@ -93,11 +93,38 @@ func _update_hud() -> void:
 	if world.has_method("get_territory_ratio_per_team") and world.has_method("get_alive_marbles_per_team"):
 		var ratios: Array = world.call("get_territory_ratio_per_team")
 		var alive: Array = world.call("get_alive_marbles_per_team")
+		
+		var stats: Array = []
 		for t in range(min(ratios.size(), alive.size())):
-			var team_name: String = _resolve_team_name(t, team_names)
-			lines.append("%s: %5.1f%% | %d marbles" % [team_name, float(ratios[t]) * 100.0, int(alive[t])])
+			stats.append({
+				"id": t,
+				"ratio": float(ratios[t]),
+				"alive": int(alive[t]),
+				"name": _resolve_team_name(t, team_names)
+			})
+			
+		# Sort by ratio descending
+		stats.sort_custom(func(a, b): return a.ratio > b.ratio)
+		
+		for rank in range(stats.size()):
+			var s = stats[rank]
+			var rank_num := rank + 1
+			var color_tag := ""
+			var end_tag := ""
+			
+			if "bbcode_enabled" in hud: # If it's a RichTextLabel
+				if rank_num == 1: color_tag = "[color=yellow]"
+				elif rank_num == 2: color_tag = "[color=light_gray]"
+				elif rank_num == 3: color_tag = "[color=orange]"
+				
+				if color_tag != "": end_tag = "[/color]"
+			
+			lines.append("%sTOP %d: %s <%5.1f%%>%s" % [color_tag, rank_num, s.name, s.ratio * 100.0, end_tag])
 
-	hud.text = "\n".join(lines)
+	if "bbcode_enabled" in hud:
+		hud.set("text", "\n".join(lines))
+	else:
+		hud.set("text", "\n".join(lines))
 
 
 func _resolve_team_name(team_idx: int, team_names: Array) -> String:
@@ -135,10 +162,17 @@ func _setup_hud_visual() -> void:
 	font.font_weight = 700
 	settings.font = font
 	settings.font_color = Color.WHITE
-	settings.font_size = 16
-	settings.outline_size = 5
+	settings.font_size = 14 # Smaller font size
+	settings.outline_size = 3
 	settings.outline_color = Color.BLACK
-	hud.label_settings = settings
+	if hud is Label:
+		hud.label_settings = settings
+	elif "bbcode_enabled" in hud:
+		hud.set("bbcode_enabled", true)
+		hud.set("theme_override_font_sizes/normal_font_size", 14)
+		# Support outline for RichTextLabel if available via theme constants
+		hud.set("theme_override_colors/font_outline_color", Color.BLACK)
+		hud.set("theme_override_constants/outline_size", 3)
 
 
 func _setup_fixed_camera(config: GameConfig) -> void:

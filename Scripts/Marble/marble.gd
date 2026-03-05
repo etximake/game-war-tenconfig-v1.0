@@ -138,6 +138,9 @@ var _orig_label_text: String = ""
 var _pierce_tween: Tween = null
 var _power_tween: Tween = null
 var _ws_tween: Tween = null
+var _rescue_timer: float = 0.0
+var _last_pos_check: Vector2 = Vector2.ZERO
+var _pos_check_timer: float = 0.0
 
 func _ready() -> void:
 	can_sleep = false
@@ -168,6 +171,8 @@ func _ready() -> void:
 	_reset_dir_timer()
 	_bias_timer = 0.0
 	_wall_cooldown = 0.0
+	_last_pos_check = global_position
+	_pos_check_timer = 0.0
 
 	collision_layer = 1
 	collision_mask = 1
@@ -214,16 +219,24 @@ func _physics_process(delta: float) -> void:
 			_recompute_speed()
 	if _territory_immunity_left > 0.0:
 		_territory_immunity_left = max(_territory_immunity_left - delta, 0.0)
+	if _rescue_timer > 0.0:
+		_rescue_timer = max(_rescue_timer - delta, 0.0)
 
-	# Giám sát kẹt (Stuck Detection)
+	# Giám sát kẹt (Stuck Detection bằng Displacement)
 	if SIM_RUNNING:
-		# So sánh với move_speed (mục tiêu thực sự), không dùng _desired_velocity vì nó ≈ _current_velocity khi bị block
-		if _current_velocity.length() < 30.0 and move_speed > 50.0:
-			_stuck_sec += delta
-		else:
-			_stuck_sec = max(_stuck_sec - delta * 2.0, 0.0)
+		_pos_check_timer += delta
+		if _pos_check_timer >= 0.2: # Kiểm tra mỗi 0.2s
+			var dist := global_position.distance_to(_last_pos_check)
+			# Nếu không di chuyển quá 5 pixel trong 0.2s trong khi đáng lẽ phải chạy
+			if dist < 5.0 and move_speed > 50.0:
+				_stuck_sec += _pos_check_timer
+			else:
+				_stuck_sec = max(_stuck_sec - _pos_check_timer * 2.0, 0.0)
+			
+			_last_pos_check = global_position
+			_pos_check_timer = 0.0
 
-		if _stuck_sec > 1.0 and not _is_sos:
+		if _stuck_sec > 1.2 and not _is_sos:
 			_set_sos_state(true)
 		elif _stuck_sec <= 0.0 and _is_sos:
 			_set_sos_state(false)
@@ -238,7 +251,13 @@ func _physics_process(delta: float) -> void:
 		else:
 			_cached_bias_dir = Vector2.ZERO
 
-	var target_dir := base_dir + _cached_bias_dir * bias_strength
+	var target_dir := base_dir
+	if _rescue_timer <= 0.0:
+		var bias_str := bias_strength
+		if App.config != null:
+			bias_str = float(App.config.combat_bias_strength)
+		target_dir = base_dir + _cached_bias_dir * bias_str
+	
 	if target_dir.length() < 0.001:
 		target_dir = base_dir
 	target_dir = target_dir.normalized()
@@ -339,7 +358,7 @@ func _update_skin_label_text() -> void:
 		return
 	var t := _get_skin_display_name()
 	skin_label.text = t
-	skin_label.visible = (t != "")
+	skin_label.visible = (t != "" or _is_sos) # Stay visible if SOS
 
 func _update_skin_label_position() -> void:
 	if skin_label == null or not skin_label.visible:
@@ -575,11 +594,21 @@ func _set_sos_state(on: bool) -> void:
 
 	if on:
 		_orig_label_text = skin_label.text
-		skin_label.text = "Help me!"
+		skin_label.text = "Help!"
 		skin_label.visible = true  # Đảm bảo hiện dù marble không có skin
-		skin_label.add_theme_color_override("font_color", Color.RED)
-		skin_label.add_theme_color_override("font_outline_color", Color.WHITE)
+		skin_label.add_theme_color_override("font_color", Color.WHITE)
+		skin_label.add_theme_color_override("font_outline_color", Color.BLACK)
 		skin_label.add_theme_constant_override("outline_size", 4)
+		
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color.RED
+		sb.content_margin_left = 8
+		sb.content_margin_right = 8
+		sb.content_margin_top = 2
+		sb.content_margin_bottom = 2
+		sb.set_corner_radius_all(4)
+		skin_label.add_theme_stylebox_override("normal", sb)
+		
 		skin_label.pivot_offset = skin_label.size * 0.5
 		
 		_sos_tween = create_tween().set_loops()
@@ -595,12 +624,23 @@ func _set_sos_state(on: bool) -> void:
 		skin_label.remove_theme_color_override("font_color")
 		skin_label.remove_theme_color_override("font_outline_color")
 		skin_label.remove_theme_constant_override("outline_size")
+		skin_label.remove_theme_stylebox_override("normal")
 		skin_label.scale = Vector2.ONE
 		_update_skin_label_text()
 		
 		capture_power_mult = 1.0
 		
 		emit_signal("marble_stuck", self, global_position, team_id, false)
+
+func start_rescue(target_pos: Vector2, duration: float) -> void:
+	var dir := (target_pos - global_position)
+	if dir.length() > 0.1:
+		base_dir = dir.normalized()
+		_move_dir = base_dir
+		_rescue_timer = duration
+		# Also reset dir timer to prevent immediate change after rescue
+		_reset_dir_timer()
+		_wall_cooldown = duration * 0.5
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if not SIM_RUNNING:
@@ -804,6 +844,9 @@ func _reset_dir_timer() -> void:
 
 
 func _update_base_dir(delta: float) -> void:
+	if _rescue_timer > 0.0:
+		return
+	
 	_dir_timer -= delta
 	if _dir_timer > 0.0:
 		return
@@ -828,9 +871,17 @@ func _compute_bias_dir() -> Vector2:
 
 	var sum := Vector2.ZERO
 	var count := 0
+	
+	# Use config if available, otherwise use export defaults
+	var radius: int = sample_radius_cells
+	var b_strength: float = bias_strength
+	
+	if App.config != null:
+		radius = int(App.config.combat_sample_radius)
+		b_strength = float(App.config.combat_bias_strength)
 
-	for dy in range(-sample_radius_cells, sample_radius_cells + 1):
-		for dx in range(-sample_radius_cells, sample_radius_cells + 1):
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
 			if dx == 0 and dy == 0:
 				continue
 

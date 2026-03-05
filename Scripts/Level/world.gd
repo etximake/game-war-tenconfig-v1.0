@@ -251,12 +251,6 @@ func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
 	var dist: float = prev_pos.distance_to(tip_pos)
 	var steps: int = max(1, int(ceil(dist / sample_step)))
 
-	# Prevent painting far ahead if marble is blocked by territory
-	if m.has_method("_is_position_blocked_by_territory"):
-		if m.call("_is_position_blocked_by_territory", tip_pos):
-			# If the current tip is in blocked territory, reduce its influence
-			steps = min(steps, 1)
-
 	var center_hits: Dictionary = {}
 	var line_hits: Dictionary = {}
 	var has_last_cell: bool = false
@@ -803,33 +797,19 @@ func _on_marble_stuck(node: Marble, pos: Vector2, team: int, is_stuck: bool) -> 
 	if not is_stuck:
 		return
 	
-	# Clearance rescue: Clear a small area around the stuck marble to help it escape
-	if is_instance_valid(grid):
-		var center_cell: Vector2i = grid.call("world_to_cell", pos)
-		var clear_radius: int = 2 # 5x5 area
-		var cells_to_clear: Array[Vector2i] = []
-		for dy in range(-clear_radius, clear_radius + 1):
-			for dx in range(-clear_radius, clear_radius + 1):
-				var target_c := center_cell + Vector2i(dx, dy)
-				if _is_inside_play_rect(target_c):
-					cells_to_clear.append(target_c)
-		
-		if not cells_to_clear.is_empty():
-			grid.call("set_owner_cells_batch", cells_to_clear, team)
-			_spawn_capture_fx_for_cells(cells_to_clear, team)
-
 	# Teammate rescue: teammates swim towards the SOS signal
 	for m in marbles:
 		if not is_instance_valid(m) or m == node:
 			continue
 		if int(m.team_id) == team:
-			var dir := (pos - m.global_position).normalized()
-			if dir.length() > 0.001:
-				if "base_dir" in m:
+			if m.has_method("start_rescue"):
+				m.call("start_rescue", pos, 2.5)
+			else:
+				# Fallback if method not found for some reason
+				var dir := (pos - m.global_position).normalized()
+				if dir.length() > 0.001:
 					m.set("base_dir", dir)
-				if "_move_dir" in m:
 					m.set("_move_dir", dir)
-				# Boost speed so teammates actually move fast towards the stuck one
 				m.apply_temp_speed_boost(1.5, 2.0, false, 0.0, 0.0)
 
 
