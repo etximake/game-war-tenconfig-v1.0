@@ -12,10 +12,10 @@ var speed: float:
 		return move_speed
 	set(value):
 		move_speed = value
-@export var accel: float = 2200.0
-@export var max_turn_rate: float = 7.5
-@export var squash_strength: float = 0.08
-@export var squash_time: float = 0.12
+var accel: float = 2200.0
+var max_turn_rate: float = 7.5
+var squash_strength: float = 0.08
+var squash_time: float = 0.12
 var weapon_rotate_speed: float = 8.0
 var kill_count: int = 0
 
@@ -55,11 +55,10 @@ var _dir_timer: float = 0.0
 @export var base_dir_change_time_max: float = 3.5
 @export var base_dir_jitter_deg: float = 12.0  # nhỏ để bớt rung
 
-@export var bias_strength: float = 0.9
-@export var sample_radius_cells: int = 1
-
-@export var turn_speed: float = 10.0
-@export var bias_update_hz: float = 10.0
+var bias_strength: float = 0.9
+var sample_radius_cells: int = 1
+var turn_speed: float = 10.0
+var bias_update_hz: float = 10.0
 
 var territory: Node = null
 
@@ -106,10 +105,10 @@ var _base_weapon_offset: Vector2 = Vector2(22.0, 0.0)
 var _base_core_sprite_scale: Vector2 = Vector2.ONE
 var _base_weapon_sprite_scale: Vector2 = Vector2.ONE
 
-@export var territory_block_enabled: bool = true
-@export var territory_bounce_factor: float = 0.85
-@export var territory_push_speed: float = 80.0
-@export var territory_blocks_neutral: bool = false  # giữ FALSE để không kẹt ở neutral
+var territory_block_enabled: bool = true
+var territory_bounce_factor: float = 0.85
+var territory_push_speed: float = 80.0
+var territory_blocks_neutral: bool = false
 
 var _last_safe_pos: Vector2 = Vector2.ZERO
 var _has_safe_pos: bool = false
@@ -151,6 +150,19 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	_last_safe_pos = global_position
 	_has_safe_pos = true
+	if App.config != null:
+		accel = App.config.accel
+		max_turn_rate = App.config.max_turn_rate
+		turn_speed = App.config.turn_speed
+		bias_update_hz = App.config.bias_update_hz
+		bias_strength = App.config.combat_bias_strength
+		sample_radius_cells = App.config.combat_sample_radius
+		territory_block_enabled = App.config.territory_block_enabled
+		territory_bounce_factor = App.config.territory_bounce_factor
+		territory_push_speed = App.config.territory_push_speed
+		move_speed = App.config.move_speed
+		weapon_rotate_speed = App.config.weapon_rotate_speed
+
 	_base_move_speed = move_speed
 	speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
@@ -281,10 +293,7 @@ func _physics_process(delta: float) -> void:
 
 	var target_dir := base_dir
 	if _rescue_timer <= 0.0:
-		var bias_str := bias_strength
-		if App.config != null:
-			bias_str = float(App.config.combat_bias_strength)
-		target_dir = base_dir + _cached_bias_dir * bias_str
+		target_dir = base_dir + _cached_bias_dir * bias_strength
 	
 	if target_dir.length() < 0.001:
 		target_dir = base_dir
@@ -917,13 +926,8 @@ func _compute_bias_dir() -> Vector2:
 	var sum := Vector2.ZERO
 	var count := 0
 	
-	# Use config if available, otherwise use export defaults
 	var radius: int = sample_radius_cells
 	var b_strength: float = bias_strength
-	
-	if App.config != null:
-		radius = int(App.config.combat_sample_radius)
-		b_strength = float(App.config.combat_bias_strength)
 
 	for dy in range(-radius, radius + 1):
 		for dx in range(-radius, radius + 1):

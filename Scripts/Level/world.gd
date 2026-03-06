@@ -14,14 +14,14 @@ var territory_fx: TerritoryFXManager = null
 @export var available_skins: Array[MarbleSkin] = []
 
 # ✅ độ dày vệt paint theo tip (0: 1 cell, 1: 3 cell)
-@export_range(0, 1, 1) var paint_thickness: int = 0
-@export_range(0.0, 0.45, 0.01) var capture_inner_margin_ratio: float = 0.12
-@export_range(1, 12, 1) var capture_substeps_per_cell: int = 6
-@export_range(0.1, 10.0, 0.1) var capture_pressure_per_tick: float = 1.0
-@export_range(0.5, 12.0, 0.5) var capture_threshold: float = 3.0
-@export_range(0.1, 6.0, 0.1) var capture_decay_per_tick: float = 0.8
-@export_range(0.5, 4.0, 0.1) var capture_line_pressure_bonus: float = 1.2
-@export_range(1, 8, 1) var capture_min_contact_samples: int = 2
+var paint_thickness: int = 0
+var capture_inner_margin_ratio: float = 0.12
+var capture_substeps_per_cell: int = 6
+var capture_pressure_per_tick: float = 1.0
+var capture_threshold: float = 3.0
+var capture_decay_per_tick: float = 0.8
+var capture_line_pressure_bonus: float = 1.2
+var capture_min_contact_samples: int = 2
 
 @onready var GridScene: PackedScene = preload("res://Scenes/Level/TerritoryGrid.tscn")
 @onready var MarbleScene: PackedScene = preload("res://Scenes/Marble/Marble.tscn")
@@ -80,8 +80,15 @@ func start_match() -> void:
 
 	# ✅ FIX: sync team_count theo config.num_teams (không dùng hardcode 6 nữa)
 	team_count = int(config.num_teams)
-	# ✅ Force brush thickness to 0 to prevent early color change
-	paint_thickness = 0
+	# ✅ sync capture parameters from config
+	paint_thickness = config.paint_thickness
+	capture_inner_margin_ratio = config.capture_inner_margin_ratio
+	capture_substeps_per_cell = config.capture_substeps_per_cell
+	capture_pressure_per_tick = config.capture_pressure_per_tick
+	capture_threshold = config.capture_threshold
+	capture_decay_per_tick = config.capture_decay_per_tick
+	capture_line_pressure_bonus = config.capture_line_pressure_bonus
+	capture_min_contact_samples = config.capture_min_contact_samples
 	
 	if team_count < 2:
 		push_error("World: config.num_teams must be >= 2")

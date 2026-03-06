@@ -24,9 +24,9 @@ var _pool_i := 0
 func _ready() -> void:
 	# TODO: sửa list này theo file thật của bạn
 	var paths := [
-		"res://Assets/Audios/Kills/kill_1.mp3",
+		#"res://Assets/Audios/Kills/kill_1.mp3",
 		"res://Assets/Audios/Kills/kill_2.mp3",
-		"res://Assets/Audios/Kills/kill_3.mp3",
+		#"res://Assets/Audios/Kills/kill_3.mp3",
 		#"res://Assets/Audios/Kills/kill_5.mp3",
 	]
 

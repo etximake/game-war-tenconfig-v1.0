@@ -11,7 +11,24 @@ class_name GameConfig
 @export var win_territory_ratio: float = 0.98
 
 # =========================
-# territory
+# MARBLE GROUP (Lực Chiến Bi)
+# =========================
+@export_group("marble_combat")
+@export var move_speed: float = 240.0
+@export var accel: float = 2200.0
+@export var max_turn_rate: float = 7.5
+@export var turn_speed: float = 10.0
+@export var bias_update_hz: float = 10.0
+@export var weapon_rotate_speed: float = 5.0
+@export var initial_size_scale: float = 0.5
+@export var growth_step: float = 0.08
+@export var max_size_scale: float = 2.2
+@export var combat_bias_strength: float = 0.9
+@export var combat_sample_radius: int = 6
+@export var marbles_per_team: int = 1
+
+# =========================
+# territory (Bản Đồ & Chiếm Đóng)
 # =========================
 @export_group("territory")
 @export var team_colors: Array[Color] = [
@@ -28,24 +45,20 @@ class_name GameConfig
 @export var grid_width: int = 80
 @export var grid_height: int = 45
 
-# =========================
-# marble
-# =========================
-@export_group("marble")
-@export var move_speed: float = 240.0
-@export var weapon_rotate_speed: float = 5.0
-@export var initial_size_scale: float = 0.5
-@export var growth_step: float = 0.08
-@export var max_size_scale: float = 2.2
-@export var capture_radius: float = 72.0
-@export var combat_bias_strength: float = 0.9
-@export var combat_sample_radius: int = 6
+@export_subgroup("capture_logic")
+@export var paint_thickness: int = 0
+@export var capture_inner_margin_ratio: float = 0.12
+@export var capture_substeps_per_cell: int = 6
+@export var capture_pressure_per_tick: float = 1.0
+@export var capture_threshold: float = 3.0
+@export var capture_decay_per_tick: float = 0.8
+@export var capture_line_pressure_bonus: float = 1.2
+@export var capture_min_contact_samples: int = 2
 
-# =========================
-# spawn
-# =========================
-@export_group("spawn")
-@export var marbles_per_team: int = 1
+@export_subgroup("physics_block")
+@export var territory_block_enabled: bool = true
+@export var territory_bounce_factor: float = 0.85
+@export var territory_push_speed: float = 80.0
 
 # =========================
 # game_rules
@@ -112,10 +125,6 @@ class_name GameConfig
 @export_group("ui")
 @export var show_hud: bool = true
 @export var hud_update_hz: float = 4.0
-
-# =========================
-# content
-# =========================
 
 # =========================
 # tooling

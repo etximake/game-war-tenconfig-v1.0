@@ -7,14 +7,13 @@
 [resource]
 script = ExtResource("1")
 num_teams = 6
+move_speed = 130.0
+growth_step = 0.0
+combat_bias_strength = 0.5
+combat_sample_radius = 2
+marbles_per_team = 2
 team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 0.5, 0, 1)])
 grid_cell_size = 24
-move_speed = 130.0
-weapon_rotate_speed = 4.0
-growth_step = 0.0
-combat_bias_strength = 0.4
-combat_sample_radius = 1
-marbles_per_team = 2
 rule_1_marble_names = null
 rule_1_team_mult = null
 rule_2_marble_names = null
