@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="GameConfig" load_steps=3 format=3 uid="uid://5hqy3anh0ycf"]
+[gd_resource type="Resource" script_class="GameConfig" load_steps=4 format=3 uid="uid://5hqy3anh0ycf"]
 
 [ext_resource type="Script" uid="uid://colug3a3offek" path="res://Scripts/Systems/game_config.gd" id="1"]
+[ext_resource type="Script" uid="uid://bewwjj3wwi3dc" path="res://Scripts/Systems/game_rule_event.gd" id="1_hd6tg"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="1_u114o"]
 
 [resource]
@@ -12,24 +13,15 @@ move_speed = 130.0
 weapon_rotate_speed = 4.0
 growth_step = 0.0
 combat_bias_strength = 0.4
-combat_sample_radius = 2
+combat_sample_radius = 1
 marbles_per_team = 2
-participant_rules_enabled = false
-participant_team_size_mult = PackedFloat32Array(2.5, 0.4)
-participant_team_speed_mult = PackedFloat32Array(0.7, 2)
-participant_team_count_mult = PackedFloat32Array(1, 20)
-rule_2_enabled = false
-rule_2_start_delay_sec = 15.0
-rule_2_period_sec = 15.0
-rule_2_small_speed_mult = 1.4
-rule_2_small_size_mult = 0.3
-rule_2_swarm_count_min = 2
-rule_2_swarm_count_max = 6
-rule_2_spawn_lifetime_sec = 10.0
-rule_2_enabled_marble_types = PackedStringArray()
-rule_3_zone_count = 4
-rule_3_boost_mult = 1.8
-rule_4_mini_speed_mult = 2.0
-rule_4_mini_size_mult = 0.4
-rule_5_enabled = false
-rng_seed = 5
+rule_1_marble_names = null
+rule_1_team_mult = null
+rule_2_marble_names = null
+rule_2_team_mult = null
+rule_3_marble_names = null
+rule_3_team_mult = null
+rule_4_marble_names = null
+rule_5_enabled = true
+rule_5_marble_names = null
+rng_seed = 3

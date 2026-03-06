@@ -24,6 +24,7 @@ var _base_weapon_rotate_speed: float = 8.0
 var _external_speed_mult: float = 1.0
 var _temp_boost_mult: float = 1.0
 var _temp_boost_left_sec: float = 0.0
+const MAX_SPEED: float = 2500.0
 
 # ===== Simulation gate (intro mode) =====
 static var SIM_RUNNING: bool = false   # tất cả marble dùng chung
@@ -469,8 +470,13 @@ func _apply_random_direction_offset(angle_min_deg: float, angle_max_deg: float) 
 
 func _recompute_speed() -> void:
 	var final_mult: float = max(_external_speed_mult * _temp_boost_mult, 0.01)
-	move_speed = speed * final_mult
+	# FIX: Always compute from BASE speed to prevent exponential growth
+	move_speed = _base_move_speed * final_mult
 	weapon_rotate_speed = _base_weapon_rotate_speed * final_mult
+
+	# Safety clamp for move_speed property
+	if move_speed > MAX_SPEED:
+		move_speed = MAX_SPEED
 
 
 func set_team(new_team: int) -> void:
@@ -737,14 +743,12 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 			_move_dir = base_dir
 			_wall_cooldown = 0.25
 
-	# Remove maximum limit on knockback or just limit the base velocity
-	if _sweep_knockback_vel.length() < 10.0:
-		if v.length() > move_speed:
-			v = v.normalized() * move_speed
-	else:
-		# Giới hạn xíu nếu knockback quá to
-		if v.length() > move_speed + _sweep_knockback_vel.length():
-			v = v.normalized() * (move_speed + _sweep_knockback_vel.length())
+	# Limit final velocity based on current move_speed and safety constant
+	var current_max: float = max(move_speed + _sweep_knockback_vel.length(), 100.0)
+	current_max = min(current_max, MAX_SPEED)
+	
+	if v.length() > current_max:
+		v = v.normalized() * current_max
 
 	state.linear_velocity = v
 	_current_velocity = v

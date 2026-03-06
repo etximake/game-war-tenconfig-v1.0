@@ -75,7 +75,6 @@ func start_match() -> void:
 	if config == null:
 		push_error("World: App.config is null")
 		return
-	_normalize_merged_rules()
 
 	_match_over = false
 
@@ -223,7 +222,7 @@ func _draw() -> void:
 
 	for zone in _speed_rain_zones:
 		var p: Vector2 = zone.get("pos", Vector2.ZERO)
-		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_3_zone_ttl_sec), 0.1), 0.25, 1.0)
+		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_5_zone_ttl_sec), 0.1), 0.25, 1.0)
 		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
 		draw_rect(rect, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha), true)
 		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 2.0)
@@ -793,7 +792,7 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 		var cx: int = rect.position.x + int(floor(float(rect.size.x) * 0.5))
 		var cy: int = rect.position.y + int(floor(float(rect.size.y) * 0.5))
 		var base_pos: Vector2 = grid.call("cell_to_world", Vector2i(cx, cy)) + Vector2(cs * 0.5, cs * 0.5)
-		var count_mult: float = _get_participant_mult(config.participant_team_count_mult, team, 1.0)
+		var count_mult: float = _get_rule_mult(GameRuleEvent.RuleType.RULE_3_PARTICIPANT_COUNT, team, 1.0)
 		var team_spawn_count: int = max(1, int(round(float(marbles_per_team) * count_mult)))
 
 		for i in range(team_spawn_count):
@@ -805,8 +804,8 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 			m.position = base_pos + Vector2(jx, jy)
 
 			m.team_id = clamp(team, 0, team_count - 1)
-			var team_speed_mult: float = _get_participant_mult(config.participant_team_speed_mult, team, 1.0)
-			var team_size_mult: float = _get_participant_mult(config.participant_team_size_mult, team, 1.0)
+			var team_speed_mult: float = _get_rule_mult(GameRuleEvent.RuleType.RULE_2_PARTICIPANT_SPEED, team, 1.0)
+			var team_size_mult: float = _get_rule_mult(GameRuleEvent.RuleType.RULE_1_PARTICIPANT_SIZE, team, 1.0)
 			m.move_speed = float(config.move_speed) * max(team_speed_mult, 0.05)
 			m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(team_speed_mult, 0.05)
 			m.size_scale = float(config.initial_size_scale) * clamp(team_size_mult, 0.2, 4.0)
@@ -1159,10 +1158,10 @@ func _register_rule_4_flash_cell(world_pos: Vector2) -> void:
 		return
 	if not bool(config.rule_4_enabled):
 		return
-	if not bool(config.rule_3_enabled):
-		return
 
-	var ttl: float = max(float(config.rule_4_flash_cell_ttl_sec), 0.1)
+	var ttl: float = 1.0
+	if "rule_4_flash_cell_ttl_sec" in config:
+		ttl = max(float(config.get("rule_4_flash_cell_ttl_sec")), 0.1)
 	var cell: Vector2i = grid.call("world_to_cell", world_pos)
 	var pos: Vector2 = grid.call("cell_to_world", cell) + Vector2(float(config.grid_cell_size) * 0.5, float(config.grid_cell_size) * 0.5)
 	_rule_4_flash_cells.append({"pos": pos, "ttl": ttl, "max_ttl": ttl})
@@ -1263,7 +1262,7 @@ func _spawn_speed_rain_zone() -> void:
 		rng.randi_range(0, max(0, int(config.grid_height) - 1))
 	)
 	var p := Vector2((float(cell.x) + 0.5) * cs, (float(cell.y) + 0.5) * cs)
-	_speed_rain_zones.append({"pos": p, "ttl": float(config.rule_3_zone_ttl_sec)})
+	_speed_rain_zones.append({"pos": p, "ttl": float(config.rule_5_zone_ttl_sec)})
 	if bool(config.rule_4_enabled):
 		_register_rule_4_flash_cell(p)
 
@@ -1274,7 +1273,7 @@ func _update_speed_rain(delta: float) -> void:
 	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
 
-	var zone_radius: float = float(config.grid_cell_size) * max(float(config.rule_3_zone_radius_cells), 0.5)
+	var zone_radius: float = float(config.grid_cell_size) * max(float(config.rule_5_zone_radius_cells), 0.5)
 	for i in range(_speed_rain_zones.size() - 1, -1, -1):
 		var zone := _speed_rain_zones[i]
 		zone["ttl"] = float(zone.get("ttl", 0.0)) - delta
@@ -1290,8 +1289,14 @@ func _update_speed_rain(delta: float) -> void:
 			var zp: Vector2 = zone.get("pos", Vector2.ZERO)
 			if m.global_position.distance_to(zp) > zone_radius:
 				continue
-			var dur := rng.randf_range(float(config.rule_3_boost_duration_min_sec), float(config.rule_3_boost_duration_max_sec))
-			m.apply_temp_speed_boost(float(config.rule_3_boost_mult), dur, bool(config.rule_3_random_direction_enabled), float(config.rule_3_angle_min_deg), float(config.rule_3_angle_max_deg))
+			if not _is_rule_active_for_team(GameRuleEvent.RuleType.RULE_5_SPEED_RAIN, m.team_id):
+				continue
+			
+			# ✅ FIX: Only trigger if boost is nearly expired or not active (prevent frame-by-frame jitter)
+			var boost_left: float = float(m.get("_temp_boost_left_sec")) if "_temp_boost_left_sec" in m else 0.0
+			if boost_left < 0.2:
+				var dur := rng.randf_range(float(config.rule_5_boost_duration_min_sec), float(config.rule_5_boost_duration_max_sec))
+				m.apply_temp_speed_boost(float(config.rule_5_boost_mult), dur, bool(config.rule_5_random_direction_enabled), float(config.rule_5_angle_min_deg), float(config.rule_5_angle_max_deg))
 			break
 
 	for i in range(_rule_4_flash_cells.size() - 1, -1, -1):
@@ -1306,7 +1311,9 @@ func _update_speed_rain(delta: float) -> void:
 
 
 func rule_infinite_spawn_tick() -> void:
-	if config == null or not config.rule_2_enabled:
+	if config == null:
+		return
+	if not (escalation_director.is_rule_active(GameRuleEvent.RuleType.RULE_4_SPAWN_PRESSURE) if escalation_director else config.rule_4_enabled):
 		return
 	var alive_teams := get_alive_team_ids()
 	if alive_teams.is_empty():
@@ -1314,14 +1321,14 @@ func rule_infinite_spawn_tick() -> void:
 	var eligible_teams: Array[int] = []
 	for team in alive_teams:
 		var team_id: int = int(team)
-		if _is_rule_2_enabled_for_team(team_id):
+		if _is_rule_active_for_team(GameRuleEvent.RuleType.RULE_4_SPAWN_PRESSURE, team_id):
 			eligible_teams.append(team_id)
 	if eligible_teams.is_empty():
 		return
-	if _get_leading_territory_ratio() >= float(config.rule_2_stop_fill_ratio):
+	if _get_leading_territory_ratio() >= float(config.rule_4_stop_fill_ratio):
 		return
-	var min_count: int = int(config.rule_2_swarm_count_min)
-	var max_count: int = int(config.rule_2_swarm_count_max)
+	var min_count: int = int(config.rule_4_swarm_count_min)
+	var max_count: int = int(config.rule_4_swarm_count_max)
 	if min_count > max_count:
 		var tmp := min_count
 		min_count = max_count
@@ -1331,47 +1338,11 @@ func rule_infinite_spawn_tick() -> void:
 		var team := int(eligible_teams[rng.randi_range(0, eligible_teams.size() - 1)])
 		_spawn_custom_marble_for_team(
 			team,
-			float(config.rule_2_small_size_mult),
-			float(config.rule_2_small_speed_mult),
-			float(config.rule_2_spawn_lifetime_sec),
+			float(config.rule_4_small_size_mult),
+			float(config.rule_4_small_speed_mult),
+			float(config.rule_4_spawn_lifetime_sec),
 			false
 		)
-
-
-func _is_rule_2_enabled_for_team(team: int) -> bool:
-	if config == null:
-		return false
-	if team < 0 or team >= team_count:
-		return false
-
-	if available_skins.is_empty():
-		return true
-	var skin_idx: int = team % available_skins.size()
-	var skin := available_skins[skin_idx]
-	if skin == null:
-		return false
-
-	if skin.has_method("get") and bool(skin.get("rule_2_spawn_pressure_enabled")) == false:
-		return false
-
-	var enabled_types: PackedStringArray = config.rule_2_enabled_marble_types
-	if enabled_types.is_empty():
-		return true
-
-	var marble_type_name: String = ""
-	if skin.has_method("get"):
-		marble_type_name = str(skin.get("skin_name")).strip_edges().to_lower()
-	if marble_type_name == "":
-		marble_type_name = skin.resource_name.strip_edges().to_lower()
-	if marble_type_name == "" and skin.resource_path != "":
-		marble_type_name = skin.resource_path.get_file().get_basename().strip_edges().to_lower()
-	if marble_type_name == "":
-		return false
-
-	for type_name in enabled_types:
-		if marble_type_name == str(type_name).strip_edges().to_lower():
-			return true
-	return false
 
 
 func _get_leading_territory_ratio() -> float:
@@ -1384,41 +1355,86 @@ func _get_leading_territory_ratio() -> float:
 	return best
 
 
+func _is_rule_active_for_team(rule_type: GameRuleEvent.RuleType, team: int) -> bool:
+	if config == null:
+		return false
+	if team < 0 or team >= team_count:
+		return false
+		
+	var is_active := false
+	var allowed_names: PackedStringArray = PackedStringArray()
+	
+	if rule_type == GameRuleEvent.RuleType.RULE_1_PARTICIPANT_SIZE:
+		is_active = escalation_director.is_rule_active(rule_type) if escalation_director else config.rule_1_enabled
+		allowed_names = config.rule_1_marble_names
+	elif rule_type == GameRuleEvent.RuleType.RULE_2_PARTICIPANT_SPEED:
+		is_active = escalation_director.is_rule_active(rule_type) if escalation_director else config.rule_2_enabled
+		allowed_names = config.rule_2_marble_names
+	elif rule_type == GameRuleEvent.RuleType.RULE_3_PARTICIPANT_COUNT:
+		is_active = escalation_director.is_rule_active(rule_type) if escalation_director else config.rule_3_enabled
+		allowed_names = config.rule_3_marble_names
+	elif rule_type == GameRuleEvent.RuleType.RULE_4_SPAWN_PRESSURE:
+		is_active = escalation_director.is_rule_active(rule_type) if escalation_director else config.rule_4_enabled
+		allowed_names = config.rule_4_marble_names
+	elif rule_type == GameRuleEvent.RuleType.RULE_5_SPEED_RAIN:
+		is_active = escalation_director.is_rule_active(rule_type) if escalation_director else config.rule_5_enabled
+		allowed_names = config.rule_5_marble_names
+
+	if not is_active:
+		return false
+
+	if allowed_names.is_empty():
+		return true
+
+	var skin_name := _get_team_sprite_name(team)
+	if skin_name == "":
+		return false
+		
+	for allowed in allowed_names:
+		if skin_name.to_lower() == str(allowed).strip_edges().to_lower():
+			return true
+			
+	return false
+
+func _get_team_sprite_name(team: int) -> String:
+	if available_skins.is_empty():
+		return ""
+	var skin_idx: int = team % available_skins.size()
+	var skin := available_skins[skin_idx]
+	if skin == null:
+		return ""
+		
+	var marble_type_name: String = ""
+	if skin.has_method("get"):
+		marble_type_name = str(skin.get("skin_name")).strip_edges().to_lower()
+	if marble_type_name == "":
+		marble_type_name = skin.resource_name.strip_edges().to_lower()
+	if marble_type_name == "" and skin.resource_path != "":
+		marble_type_name = skin.resource_path.get_file().get_basename().strip_edges().to_lower()
+	return marble_type_name
+
 func rule_speed_rain_tick() -> void:
-	if config == null or not config.rule_3_enabled:
+	if config == null:
 		return
-	var count: int = max(1, int(config.rule_3_zone_count))
+	if not (escalation_director.is_rule_active(GameRuleEvent.RuleType.RULE_5_SPEED_RAIN) if escalation_director else config.rule_5_enabled):
+		return
+	var count: int = max(1, int(config.rule_5_zone_count))
 	for i in range(count):
 		_spawn_speed_rain_zone()
 	queue_redraw()
 
-
-func _get_participant_mult(arr: PackedFloat32Array, team: int, fallback: float) -> float:
-	if config == null or not bool(config.participant_rules_enabled):
+func _get_rule_mult(rule_type: GameRuleEvent.RuleType, team: int, fallback: float) -> float:
+	if not _is_rule_active_for_team(rule_type, team):
 		return fallback
+		
+	var arr: PackedFloat32Array = PackedFloat32Array()
+	if rule_type == GameRuleEvent.RuleType.RULE_1_PARTICIPANT_SIZE:
+		arr = config.rule_1_team_mult
+	elif rule_type == GameRuleEvent.RuleType.RULE_2_PARTICIPANT_SPEED:
+		arr = config.rule_2_team_mult
+	elif rule_type == GameRuleEvent.RuleType.RULE_3_PARTICIPANT_COUNT:
+		arr = config.rule_3_team_mult
+
 	if team >= 0 and team < arr.size():
 		return float(arr[team])
 	return fallback
-
-
-func _normalize_merged_rules() -> void:
-	if config == null:
-		return
-
-	config.rule_2_swarm_count_min = max(int(config.rule_2_swarm_count_min), 1)
-	config.rule_2_swarm_count_max = max(int(config.rule_2_swarm_count_max), int(config.rule_2_swarm_count_min))
-	config.rule_2_spawn_lifetime_sec = max(float(config.rule_2_spawn_lifetime_sec), 0.0)
-	config.rule_2_start_delay_sec = max(float(config.rule_2_start_delay_sec), 0.0)
-	config.rule_2_period_sec = max(float(config.rule_2_period_sec), 0.01)
-	config.rule_4_flash_cell_ttl_sec = max(float(config.rule_4_flash_cell_ttl_sec), 0.1)
-	config.rule_2_stop_fill_ratio = clamp(float(config.rule_2_stop_fill_ratio), 0.0, 1.0)
-
-	if bool(config.rule_5_enabled):
-		config.rule_3_random_direction_enabled = true
-		config.rule_3_angle_min_deg = float(config.rule_5_angle_min_deg)
-		config.rule_3_angle_max_deg = float(config.rule_5_angle_max_deg)
-
-	if config.rule_3_angle_min_deg > config.rule_3_angle_max_deg:
-		var ang_tmp := config.rule_3_angle_min_deg
-		config.rule_3_angle_min_deg = config.rule_3_angle_max_deg
-		config.rule_3_angle_max_deg = ang_tmp
