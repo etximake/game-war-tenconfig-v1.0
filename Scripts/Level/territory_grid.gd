@@ -12,6 +12,13 @@ var owners: PackedInt32Array = PackedInt32Array()
 const OWNER_NEUTRAL: int = -1
 const OWNER_OOB: int = -999
 
+# Rendering optimization
+var _img: Image
+var _tex: ImageTexture
+var _sprite: Sprite2D
+var _needs_tex_update: bool = false
+var _neutral_color := Color(0.05, 0.05, 0.05, 1.0)
+
 
 func setup(p_config: GameConfig) -> void:
 	config = p_config
@@ -27,7 +34,30 @@ func setup(p_config: GameConfig) -> void:
 	for i in range(n):
 		owners[i] = OWNER_NEUTRAL
 
+	# Setup Image and Texture
+	_img = Image.create(w, h, false, Image.FORMAT_RGBA8)
+	_img.fill(_neutral_color)
+	
+	_tex = ImageTexture.create_from_image(_img)
+	
+	if not _sprite:
+		_sprite = Sprite2D.new()
+		_sprite.centered = false
+		_sprite.show_behind_parent = true
+		add_child(_sprite)
+	
+	_sprite.texture = _tex
+	# Scale sprite to match cell size
+	_sprite.scale = Vector2(config.grid_cell_size, config.grid_cell_size)
+	_sprite.texture_filter = TEXTURE_FILTER_NEAREST
+
 	queue_redraw()
+
+
+func _process(_delta: float) -> void:
+	if _needs_tex_update:
+		_tex.update(_img)
+		_needs_tex_update = false
 
 
 # =========================
@@ -43,9 +73,7 @@ func world_to_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(x, y)
 
 
-
 func cell_to_world(cell: Vector2i) -> Vector2:
-	# trả về top-left của cell
 	if config == null:
 		return Vector2.ZERO
 	var cs: float = float(config.grid_cell_size)
@@ -79,6 +107,8 @@ func set_owner_cell(x: int, y: int, team: int, redraw: bool = true) -> void:
 		return
 
 	owners[idx] = team
+	_update_pixel(x, y, team)
+	
 	if redraw:
 		queue_redraw()
 
@@ -104,6 +134,7 @@ func set_owner_cells_batch(cells: Array[Vector2i], team: int) -> void:
 			continue
 
 		owners[idx] = team
+		_update_pixel(x, y, team)
 		changed = true
 
 	if changed:
@@ -116,15 +147,27 @@ func fill_all(team: int) -> void:
 	if owners.is_empty():
 		return
 
-	var changed: bool = false
-	for i in range(owners.size()):
-		if owners[i] == team:
-			continue
-		owners[i] = team
-		changed = true
+	var color = _get_team_color(team)
+	_img.fill(color)
+	_needs_tex_update = true
 
-	if changed:
-		queue_redraw()
+	for i in range(owners.size()):
+		owners[i] = team
+
+	queue_redraw()
+
+
+func _update_pixel(x: int, y: int, team: int) -> void:
+	if not _img: return
+	var color = _get_team_color(team)
+	_img.set_pixel(x, y, color)
+	_needs_tex_update = true
+
+
+func _get_team_color(team: int) -> Color:
+	if team >= 0 and team < config.team_colors.size():
+		return config.team_colors[team]
+	return _neutral_color
 
 
 # =========================
@@ -134,27 +177,11 @@ func _draw() -> void:
 	if config == null:
 		return
 
-	var w: int = int(config.grid_width)
-	var h: int = int(config.grid_height)
-	var cs: float = float(config.grid_cell_size)
-
-	# draw cells
-	for y in range(h):
-		for x in range(w):
-			var idx: int = y * w + x
-			var owner: int = owners[idx]
-
-			var col: Color
-			if owner >= 0 and owner < config.team_colors.size():
-				col = config.team_colors[owner]
-			else:
-				# neutral: hơi xám/đậm để thấy rõ biên
-				col = Color(0.05, 0.05, 0.05, 1.0)
-
-			draw_rect(Rect2(Vector2(x * cs, y * cs), Vector2(cs, cs)), col, true)
-
-	# grid lines (optional)
+	# Grid lines only (territory is drawn by Sprite2D with ImageTexture)
 	if draw_grid_lines:
+		var w: int = int(config.grid_width)
+		var h: int = int(config.grid_height)
+		var cs: float = float(config.grid_cell_size)
 		var lc := Color(0.0, 0.0, 0.0, grid_line_alpha)
 		var total_w: float = float(w) * cs
 		var total_h: float = float(h) * cs

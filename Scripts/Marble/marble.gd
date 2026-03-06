@@ -141,6 +141,7 @@ var _ws_tween: Tween = null
 var _rescue_timer: float = 0.0
 var _last_pos_check: Vector2 = Vector2.ZERO
 var _pos_check_timer: float = 0.0
+var _sos_release_timer: float = 0.0  # đếm ngược sau khi giải thoát trước khi xóa Help!
 
 func _ready() -> void:
 	can_sleep = false
@@ -222,23 +223,49 @@ func _physics_process(delta: float) -> void:
 	if _rescue_timer > 0.0:
 		_rescue_timer = max(_rescue_timer - delta, 0.0)
 
-	# Giám sát kẹt (Stuck Detection bằng Displacement)
+	# =====================================================================
+	# STUCK DETECTION: 2 pha (TH1: weapon tu giai thoat, TH2: Help!)
+	# =====================================================================
 	if SIM_RUNNING:
 		_pos_check_timer += delta
-		if _pos_check_timer >= 0.2: # Kiểm tra mỗi 0.2s
-			var dist := global_position.distance_to(_last_pos_check)
-			# Nếu không di chuyển quá 5 pixel trong 0.2s trong khi đáng lẽ phải chạy
-			if dist < 5.0 and move_speed > 50.0:
-				_stuck_sec += _pos_check_timer
+		if _pos_check_timer >= 0.2:
+			if _stuck_sec > 0.0 or _is_sos:
+				# Khi dang stuck/SOS: check land tho truc tiep (bo qua immunity) de biet marble co tu giai thoat khong
+				if _is_blocked_by_enemy_territory():
+					# Van bi block, chi tang khi chua SOS
+					if not _is_sos:
+						_stuck_sec += _pos_check_timer
+						# Kiem tra lai ngay vi _pos_check_timer se = 0 sau day
+				else:
+					# Vung xung quanh da duoc weapon quet sang team minh → tu giai thoat
+					_stuck_sec = max(_stuck_sec - _pos_check_timer * 3.0, 0.0)
 			else:
-				_stuck_sec = max(_stuck_sec - _pos_check_timer * 2.0, 0.0)
-			
+				# Binh thuong: check displacement de phat hien stuck
+				var dist := global_position.distance_to(_last_pos_check)
+				if dist < 5.0 and move_speed > 50.0:
+					_stuck_sec += _pos_check_timer
+				else:
+					_stuck_sec = max(_stuck_sec - _pos_check_timer * 2.0, 0.0)
+
 			_last_pos_check = global_position
 			_pos_check_timer = 0.0
 
+		# TH2: stuck qua lau (>1.2s), weapon khong tu giai thoat duoc → show Help!
 		if _stuck_sec > 1.2 and not _is_sos:
 			_set_sos_state(true)
+			_sos_release_timer = 0.0
 		elif _stuck_sec <= 0.0 and _is_sos:
+			if _sos_release_timer <= 0.0:
+				_sos_release_timer = 0.2  # giu 0.2s roi moi xoa Help!
+
+	# TH1 + TH2: duy tri immunity de marble khong bi teleport (giu nguyen vi tri mac ket)
+	if _stuck_sec > 0.0 or _is_sos:
+		_territory_immunity_left = 0.3
+
+	# Dem nguoc release SOS
+	if _sos_release_timer > 0.0:
+		_sos_release_timer -= delta
+		if _sos_release_timer <= 0.0 and _is_sos and _stuck_sec <= 0.0:
 			_set_sos_state(false)
 
 	_update_base_dir(delta)
@@ -280,6 +307,13 @@ func _physics_process(delta: float) -> void:
 		_play_turn_squash()
 		_turn_squash_cooldown_left = clampf(squash_time * 0.65, 0.05, 0.12)
 	_prev_target_dir = target_dir
+
+	# Khi marble bi ket (TH1 hoac TH2): giu nguyen vi tri, chi weapon quay
+	# Override velocity SAU KHI movement AI da tinh toan xong
+	if _stuck_sec > 0.0 or _is_sos:
+		_current_velocity = Vector2.ZERO
+		_desired_velocity = Vector2.ZERO
+
 	_update_skin_label_position()
 
 
@@ -451,6 +485,20 @@ func _is_territory_owner_blocked(owner: int) -> bool:
 	return (owner >= 0 and owner != team_id) or (territory_blocks_neutral and is_neutral)
 
 
+# Kiem tra marble co dang nam trong vung lanh tho dich khong (KHONG qua immunity)
+# Dung rieng cho stuck detection de biet marble da tu giai thoat chua
+func _is_blocked_by_enemy_territory() -> bool:
+	if territory == null:
+		return false
+	if not territory.has_method("world_to_cell") or not territory.has_method("get_owner_cell"):
+		return false
+	var center_cell: Vector2i = territory.call("world_to_cell", global_position)
+	var owner: int = int(territory.call("get_owner_cell", center_cell.x, center_cell.y))
+	return _is_territory_owner_blocked(owner)
+
+
+
+
 func _is_position_blocked_by_territory(pos: Vector2) -> bool:
 	if _territory_immunity_left > 0.0:
 		return false
@@ -466,7 +514,7 @@ func _is_position_blocked_by_territory(pos: Vector2) -> bool:
 	if _is_territory_owner_blocked(center_owner):
 		return true
 
-	var probe_radius: float = max(_base_core_radius * size_scale * 0.92, 1.0)
+	var probe_radius: float = _base_core_radius * size_scale
 	var probe_dirs: Array[Vector2] = [
 		Vector2.RIGHT,
 		Vector2.LEFT,
@@ -484,13 +532,6 @@ func _is_position_blocked_by_territory(pos: Vector2) -> bool:
 		var probe_owner: int = int(territory.call("get_owner_cell", probe_cell.x, probe_cell.y))
 		if _is_territory_owner_blocked(probe_owner):
 			return true
-
-	# Check slightly further in the direction of movement
-	var forward_probe := pos + _move_dir * (probe_radius * 1.1)
-	var f_cell: Vector2i = territory.call("world_to_cell", forward_probe)
-	var f_owner: int = int(territory.call("get_owner_cell", f_cell.x, f_cell.y))
-	if _is_territory_owner_blocked(f_owner):
-		return true
 
 	return false
 

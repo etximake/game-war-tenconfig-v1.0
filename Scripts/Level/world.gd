@@ -14,7 +14,7 @@ var territory_fx: TerritoryFXManager = null
 @export var available_skins: Array[MarbleSkin] = []
 
 # ✅ độ dày vệt paint theo tip (0: 1 cell, 1: 3 cell)
-@export_range(0, 1, 1) var paint_thickness: int = 1
+@export_range(0, 1, 1) var paint_thickness: int = 0
 @export_range(0.0, 0.45, 0.01) var capture_inner_margin_ratio: float = 0.12
 @export_range(1, 12, 1) var capture_substeps_per_cell: int = 6
 @export_range(0.1, 10.0, 0.1) var capture_pressure_per_tick: float = 1.0
@@ -81,6 +81,9 @@ func start_match() -> void:
 
 	# ✅ FIX: sync team_count theo config.num_teams (không dùng hardcode 6 nữa)
 	team_count = int(config.num_teams)
+	# ✅ Force brush thickness to 0 to prevent early color change
+	paint_thickness = 0
+	
 	if team_count < 2:
 		push_error("World: config.num_teams must be >= 2")
 		return
@@ -243,45 +246,73 @@ func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
 	var tip_pos: Vector2 = m.get_weapon_tip_global_pos()
 	var id := m.get_instance_id()
 	var current_team: int = int(m.team_id)
-	var prev_team: int = int(_last_tip_team_by_id.get(id, current_team))
 	var prev_pos: Vector2 = _last_tip_pos_by_id.get(id, tip_pos)
 
 	var cell_size: float = max(float(config.grid_cell_size), 1.0)
 	var sample_step: float = cell_size / float(max(capture_substeps_per_cell, 1))
-	var dist: float = prev_pos.distance_to(tip_pos)
-	var steps: int = max(1, int(ceil(dist / sample_step)))
 
 	var center_hits: Dictionary = {}
 	var line_hits: Dictionary = {}
-	var has_last_cell: bool = false
-	var last_cell: Vector2i = Vector2i.ZERO
-
-	for i in range(steps + 1):
-		var t: float = float(i) / float(steps)
-		var pnt: Vector2 = prev_pos.lerp(tip_pos, t)
-		var c: Vector2i = grid.call("world_to_cell", pnt)
-		if not _is_inside_play_rect(c):
-			continue
-
-		_add_cell_hit(center_hits, c, 1.0)
-
-		if has_last_cell and c != last_cell:
-			var bridge: Array[Vector2i] = _bresenham_cells(last_cell, c)
-			for bc in bridge:
-				if not _is_inside_play_rect(bc):
-					continue
-				_add_cell_hit(line_hits, bc, 1.0)
-
-		has_last_cell = true
-		last_cell = c
 
 	var power_mult: float = 1.0
 	if "capture_power_mult" in m:
 		power_mult = float(m.get("capture_power_mult"))
 
+	var is_sos: bool = false
+	if "_is_sos" in m:
+		is_sos = bool(m.get("_is_sos"))
+	var effective_min_contact: int = 1 if is_sos else capture_min_contact_samples
+
+	# The physical sweep arc interpolation using 4 segments along the weapon blade.
+	var core_pos: Vector2 = m.global_position
+	var cur_tip_pos: Vector2 = tip_pos
+	
+	var prev_core_pos: Vector2 = core_pos # Simplification: core doesn't move as fast as the weapon spins, we use its current position
+	if "_last_safe_pos" in m:
+		prev_core_pos = m.get("_last_safe_pos")
+	
+	# Full-Blade Sweep: interpolate from the core to the tip, and trace EACH point.
+	# We use 4 sample points along the blade (including the tip).
+	var num_blade_segments: int = 4
+	
+	for blade_idx in range(1, num_blade_segments + 1):
+		# t ranges from >0 up to 1 (the tip)
+		var length_t: float = float(blade_idx) / float(num_blade_segments)
+		
+		# Position of this blade segment in the previous frame
+		var sweep_start: Vector2 = prev_core_pos.lerp(prev_pos, length_t)
+		# Position of this blade segment in the current frame
+		var sweep_end: Vector2 = core_pos.lerp(cur_tip_pos, length_t)
+		
+		var arc_dist: float = sweep_start.distance_to(sweep_end)
+		var arc_steps: int = max(1, int(ceil(arc_dist / sample_step)))
+		
+		var arc_has_last: bool = false
+		var arc_last_cell: Vector2i = Vector2i.ZERO
+		
+		for i in range(arc_steps + 1):
+			var sweep_t: float = float(i) / float(arc_steps)
+			var pnt: Vector2 = sweep_start.lerp(sweep_end, sweep_t)
+			var c: Vector2i = grid.call("world_to_cell", pnt)
+			
+			if not _is_inside_play_rect(c):
+				continue
+				
+			_add_cell_hit(center_hits, c, 1.0)
+			
+			if arc_has_last and c != arc_last_cell:
+				var bridge: Array[Vector2i] = _bresenham_cells(arc_last_cell, c)
+				for bc in bridge:
+					if not _is_inside_play_rect(bc):
+						continue
+					_add_cell_hit(line_hits, bc, 1.0)
+					
+			arc_has_last = true
+			arc_last_cell = c
+
 	for key in center_hits.keys():
 		var hits: float = float(center_hits[key])
-		if int(round(hits)) < capture_min_contact_samples:
+		if int(round(hits)) < effective_min_contact:
 			continue
 		pressure_map[key] = hits * power_mult
 
@@ -794,23 +825,9 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 
 
 func _on_marble_stuck(node: Marble, pos: Vector2, team: int, is_stuck: bool) -> void:
-	if not is_stuck:
-		return
-	
-	# Teammate rescue: teammates swim towards the SOS signal
-	for m in marbles:
-		if not is_instance_valid(m) or m == node:
-			continue
-		if int(m.team_id) == team:
-			if m.has_method("start_rescue"):
-				m.call("start_rescue", pos, 2.5)
-			else:
-				# Fallback if method not found for some reason
-				var dir := (pos - m.global_position).normalized()
-				if dir.length() > 0.001:
-					m.set("base_dir", dir)
-					m.set("_move_dir", dir)
-				m.apply_temp_speed_boost(1.5, 2.0, false, 0.0, 0.0)
+	# SOS: marble tu xu ly tai cho qua immunity + weapon sweep (marble.gd).
+	# Khong tu dong dieu huong lai marble dong doi de dam bao luat choi.
+	pass
 
 
 

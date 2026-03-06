@@ -24,8 +24,12 @@ available_skins = Array[ExtResource("3_htilh")]([ExtResource("5_pcup4"), ExtReso
 offset = Vector2(5, 5)
 transform = Transform2D(1, 0, 0, 1, 5, 5)
 
-[node name="HUD" type="Label" parent="UI"]
+[node name="HUD" type="RichTextLabel" parent="UI"]
+anchors_preset = -1
+anchor_right = 0.13645834
+anchor_bottom = 0.11296296
 offset_right = 40.0
 offset_bottom = 23.0
+bbcode_enabled = true
 text = "HUD"
 metadata/_edit_use_anchors_ = true

@@ -2,7 +2,7 @@ extends Node2D
 
 @onready var world: Node = $World
 @onready var cam: Camera2D = $Camera2D
-@onready var hud: Control = $UI/HUD # Changed to Control to support Label or RichTextLabel
+@onready var hud: RichTextLabel = $UI/HUD # Changed to Control to support Label or RichTextLabel
 
 var _hud_timer: float = 0.0
 
@@ -83,17 +83,20 @@ func _update_hud() -> void:
 	if not world:
 		return
 
-	#var seed_text: String = "Ranking marble:" if int(App.config.rng_seed) == 0 else str(int(App.config.rng_seed))
-	var lines: Array[String] = []
-	lines.append("Ranking marble:")
 	var team_names: Array = []
 	if world.has_method("get_team_display_names"):
 		team_names = world.call("get_team_display_names")
 
+	var is_rich: bool = "bbcode_enabled" in hud
+
+	# Build header
+	var header: String = "Ranking Marble:" if not is_rich else "[b]Ranking marble:[/b]"
+	var lines: Array[String] = [header]
+
 	if world.has_method("get_territory_ratio_per_team") and world.has_method("get_alive_marbles_per_team"):
 		var ratios: Array = world.call("get_territory_ratio_per_team")
 		var alive: Array = world.call("get_alive_marbles_per_team")
-		
+
 		var stats: Array = []
 		for t in range(min(ratios.size(), alive.size())):
 			stats.append({
@@ -102,26 +105,27 @@ func _update_hud() -> void:
 				"alive": int(alive[t]),
 				"name": _resolve_team_name(t, team_names)
 			})
-			
+
 		# Sort by ratio descending
 		stats.sort_custom(func(a, b): return a.ratio > b.ratio)
-		
-		for rank in range(stats.size()):
-			var s = stats[rank]
-			var rank_num := rank + 1
-			var color_tag := ""
-			var end_tag := ""
-			
-			if "bbcode_enabled" in hud: # If it's a RichTextLabel
-				if rank_num == 1: color_tag = "[color=yellow]"
-				elif rank_num == 2: color_tag = "[color=light_gray]"
-				elif rank_num == 3: color_tag = "[color=orange]"
-				
-				if color_tag != "": end_tag = "[/color]"
-			
-			lines.append("%sTOP %d: %s <%5.1f%%>%s" % [color_tag, rank_num, s.name, s.ratio * 100.0, end_tag])
 
-	if "bbcode_enabled" in hud:
+		var total_display = min(stats.size(), 3)
+		for rank in range(total_display):
+			var s = stats[rank]
+			var rank_num: int = rank + 1
+			var row: String = "TOP %d: %s  <%5.1f%%>" % [rank_num, s.name, s.ratio * 100.0]
+
+			if is_rich:
+				# Tô màu + emoji cho TOP 1/2/3
+				match rank_num:
+					1: row = "[color=#FFD700][b]🥇 " + row + "[/b][/color]"
+					2: row = "[color=#C0C0C0][b]🥈 " + row + "[/b][/color]"
+					3: row = "[color=#CD7F32]🥉 " + row + "[/color]"
+
+			lines.append(row)
+
+	if is_rich:
+		hud.set("bbcode_enabled", true)
 		hud.set("text", "\n".join(lines))
 	else:
 		hud.set("text", "\n".join(lines))
@@ -150,29 +154,31 @@ func _on_match_ended(winner_team: int, reason: String, territory_ratio: float) -
 		msg = "WIN: %s" % team_name
 
 	_update_hud()
-	hud.text += "\n" + msg
+	hud.append_text("\n" + msg)
 
 
 func _setup_hud_visual() -> void:
 	if hud == null:
 		return
-	var settings := LabelSettings.new()
+
+	# Nền trắng, opacity 0.3
+	var bg_panel = StyleBoxFlat.new()
+	bg_panel.bg_color = Color(1, 1, 1, 0.3)
+	bg_panel.set_content_margin_all(8)
+	hud.add_theme_stylebox_override("normal", bg_panel)
+
+	# RichTextLabel: dùng theme override (không có label_settings)
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Noto Sans", "Arial", "Segoe UI"])
 	font.font_weight = 700
-	settings.font = font
-	settings.font_color = Color.WHITE
-	settings.font_size = 14 # Smaller font size
-	settings.outline_size = 3
-	settings.outline_color = Color.BLACK
-	if hud is Label:
-		hud.label_settings = settings
-	elif "bbcode_enabled" in hud:
-		hud.set("bbcode_enabled", true)
-		hud.set("theme_override_font_sizes/normal_font_size", 14)
-		# Support outline for RichTextLabel if available via theme constants
-		hud.set("theme_override_colors/font_outline_color", Color.BLACK)
-		hud.set("theme_override_constants/outline_size", 3)
+
+	hud.bbcode_enabled = true
+	hud.add_theme_font_override("normal_font", font)
+	hud.add_theme_font_size_override("normal_font_size", 16)
+	hud.add_theme_font_size_override("bold_font_size", 16)
+	hud.add_theme_color_override("default_color", Color.WHITE)
+	hud.add_theme_color_override("font_outline_color", Color.BLACK)
+	hud.add_theme_constant_override("outline_size", 5)
 
 
 func _setup_fixed_camera(config: GameConfig) -> void:
