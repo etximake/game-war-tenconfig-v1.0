@@ -141,12 +141,10 @@ func _physics_process(_delta: float) -> void:
 		if config != null:
 			var interval: float = 1.0 / max(float(config.tick_rate), 1.0)
 			_tick_accumulator += _delta
-			if _tick_accumulator >= interval:
-				# Để tránh bị chạy dồn dập (catch-up death spiral), ta chỉ trừ interval hoặc tick 1 lần
-				var ticks_to_do: int = int(_tick_accumulator / interval)
-				_tick_accumulator -= float(ticks_to_do) * interval
-				# Limit tick_to_do to 1 per physics frame to prevent freezing on lag spikes (slowmo instead)
-				_process_capture_pressure(interval * float(ticks_to_do))
+			while _tick_accumulator >= interval:
+				_tick_accumulator -= interval
+				# Limit to prevent freezing on extreme lag (though we stay deterministic)
+				_process_capture_pressure(interval)
 		else:
 			_process_capture_pressure(_delta)
 
@@ -230,9 +228,10 @@ func _draw() -> void:
 	for zone in _speed_rain_zones:
 		var p: Vector2 = zone.get("pos", Vector2.ZERO)
 		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_5_zone_ttl_sec), 0.1), 0.25, 1.0)
+		# Draw rect centered on the cell
 		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
 		draw_rect(rect, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha), true)
-		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 2.0)
+		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 1.5)
 
 	for flash in _rule_4_flash_cells:
 		var p: Vector2 = flash.get("pos", Vector2.ZERO)

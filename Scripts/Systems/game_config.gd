@@ -125,6 +125,7 @@ class_name GameConfig
 @export_group("ui")
 @export var show_hud: bool = true
 @export var hud_update_hz: float = 4.0
+@export var show_marble_labels: bool = true
 
 # =========================
 # tooling

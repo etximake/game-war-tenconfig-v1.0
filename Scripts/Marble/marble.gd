@@ -105,6 +105,9 @@ var _base_weapon_offset: Vector2 = Vector2(22.0, 0.0)
 var _base_core_sprite_scale: Vector2 = Vector2.ONE
 var _base_weapon_sprite_scale: Vector2 = Vector2.ONE
 
+var _base_core_pos: Vector2 = Vector2.ZERO
+var _base_weapon_pivot_pos: Vector2 = Vector2.ZERO
+
 var territory_block_enabled: bool = true
 var territory_bounce_factor: float = 0.85
 var territory_push_speed: float = 80.0
@@ -402,7 +405,12 @@ func _update_skin_label_text() -> void:
 		return
 	var t := _get_skin_display_name()
 	skin_label.text = t
-	skin_label.visible = (t != "" or _is_sos) # Stay visible if SOS
+	
+	var show_labels: bool = true
+	if App.config != null:
+		show_labels = App.config.show_marble_labels
+		
+	skin_label.visible = (show_labels and t != "") or _is_sos # Stay visible if SOS
 
 func _update_skin_label_position() -> void:
 	if skin_label == null or not skin_label.visible:
@@ -797,6 +805,12 @@ func apply_size_scale() -> void:
 		core_sprite.scale = _base_core_sprite_scale * s
 	if weapon_sprite:
 		weapon_sprite.scale = _base_weapon_sprite_scale * s
+		
+	if core_shape:
+		core_shape.position = _base_core_pos * s
+	if weapon_pivot:
+		weapon_pivot.position = _base_weapon_pivot_pos * s
+		
 	_apply_visual_scale_multiplier()
 
 	_apply_no_tint_visuals()
@@ -807,16 +821,22 @@ func _cache_base_from_scene_once() -> void:
 	if _cached_base:
 		return
 
-	var core_circle := core_shape.shape as CircleShape2D
-	if core_circle:
-		_base_core_radius = core_circle.radius
+	if core_shape:
+		var core_circle := core_shape.shape as CircleShape2D
+		if core_circle:
+			_base_core_radius = core_circle.radius
+		_base_core_pos = core_shape.position
 
-	var weapon_rect := weapon_shape.shape as RectangleShape2D
-	if weapon_rect:
-		_base_weapon_rect_size = weapon_rect.size
+	if weapon_shape:
+		var weapon_rect := weapon_shape.shape as RectangleShape2D
+		if weapon_rect:
+			_base_weapon_rect_size = weapon_rect.size
 
 	if weapon_area:
 		_base_weapon_offset = weapon_area.position
+		
+	if weapon_pivot:
+		_base_weapon_pivot_pos = weapon_pivot.position
 
 	if core_sprite:
 		_base_core_sprite_scale = core_sprite.scale
@@ -938,7 +958,7 @@ func _compute_bias_dir() -> Vector2:
 			var cy := cell.y + dy
 
 			var cell_owner: int = int(territory.call("get_owner_cell", cx, cy))
-			if cell_owner != team_id:
+			if cell_owner != team_id and cell_owner != -999: # -999 is OWNER_OOB
 				var world_pos: Vector2 = territory.call("cell_to_world", Vector2i(cx, cy))
 				var cs: float = float(App.config.grid_cell_size) if App.config != null else 16.0
 				var center: Vector2 = world_pos + Vector2(cs * 0.5, cs * 0.5)

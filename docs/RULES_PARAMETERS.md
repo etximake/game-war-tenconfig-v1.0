@@ -30,16 +30,29 @@ Trước khi tới phần luật, đây là các thông số chính cấu tạo 
 - **`skin_preset` / `preset_skins`**: Mảng chứa các skin áp thẳng vào game thay đổi giao diện các đội.
 - **`rng_seed`**: ID bộ tạo bóng ngẫu nhiên. Nếu để `0` -> Trận nào cũng khác nhau, ngẫu nhiên hết mọi thứ. Nếu để dạng 1 con số (Ví dụ như `5` hay `1231`) -> Trận đó sẽ replay chính xác một diễn biến random, dễ dàng tái hiện lại mọi tình huống trận đấu cho mục đích test!
 
+- **`Bộ thống số Full HD`**: Grid Cell Size: 24; Grid Width: 80; Grid Height: 45
+
 ---
 
 ## 1. Automation Preset (Kịch bản tự động)
 
 - **`automation_preset_enabled`**: Bật/tắt chế độ tự động. Nếu `true`, game sẽ bỏ qua các check box `enabled` riêng lẻ của từng rule, mà sẽ được điều khiển bởi Timeline thời gian.
 - **`automation_timeline`**: Một mảng chứa các mốc sự kiện (`GameRuleEvent`).
-  Mỗi sự kiện gồm:
-  - `start_time_sec`: Cứ sau từng này thời gian kể từ lúc bắt đầu trận, sẽ châm/kích hoạt luật này.
-  - `duration_sec`: Thời gian luật duy trì trước khi tắt đi (Bằng `0` nghĩa là vô hạn).
-  - `rule_index`: Chọn kích hoạt luật nào trong 5 luật bên dưới.
+  - **Lưu ý quan trọng**: Hệ thống nhận diện luật dựa trên một danh sách chọn sẵn (**Enum**), **KHÔNG** dựa trên việc gõ tên thủ công bằng chữ.
+
+  Mỗi sự kiện gồm các trường sau:
+  - `start_time_sec`: Thời điểm kích hoạt luật (tính bằng giây kể từ lúc bắt đầu trận).
+  - `duration_sec`: Thời gian luật duy trì trước khi tắt đi (Bằng `0` nghĩa là vô hạn - chạy đến hết trận).
+  - `rule_index`: Bạn phải bấm vào và chọn từ danh sách thả xuống (Dropdown):
+    - `NONE`: Không làm gì.
+    - `RULE_1_PARTICIPANT_SIZE`: Kích hoạt luật 1.
+    - `RULE_2_PARTICIPANT_SPEED`: Kích hoạt luật 2.
+    - `RULE_3_PARTICIPANT_COUNT`: Kích hoạt luật 3.
+    - `RULE_4_SPAWN_PRESSURE`: Kích hoạt luật 4 (**Chọn mục này thay vì gõ tên**).
+    - `RULE_5_SPEED_RAIN`: Kích hoạt luật 5.
+
+> [!IMPORTANT]
+> Nếu bạn thấy một trường 'Name' hoặc 'Resource Name' ở trên cùng của Event, đó chỉ là tên để bạn dễ quản lý file/resource trong Godot, hệ thống code của game không đọc trường đó để kích hoạt luật. Hãy đảm bảo bạn đã chọn đúng **Rule Type** trong mục `rule_index`.
 
 ---
 

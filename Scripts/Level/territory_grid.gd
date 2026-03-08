@@ -62,13 +62,14 @@ func _process(_delta: float) -> void:
 
 # =========================
 # Coordinate conversion
-func world_to_cell(pos: Vector2) -> Vector2i:
+func world_to_cell(pos: Vector2, clamp_to_bounds: bool = true) -> Vector2i:
 	var cs: int = config.grid_cell_size
 	var x: int = int(floor(pos.x / float(cs)))
 	var y: int = int(floor(pos.y / float(cs)))
 
-	x = clamp(x, 0, config.grid_width - 1)
-	y = clamp(y, 0, config.grid_height - 1)
+	if clamp_to_bounds:
+		x = clamp(x, 0, config.grid_width - 1)
+		y = clamp(y, 0, config.grid_height - 1)
 
 	return Vector2i(x, y)
 
