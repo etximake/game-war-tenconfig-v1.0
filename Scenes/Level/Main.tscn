@@ -1,10 +1,14 @@
-[gd_scene load_steps=6 format=3 uid="uid://d1w7d1dtglwsw"]
+[gd_scene load_steps=10 format=3 uid="uid://d1w7d1dtglwsw"]
 
 [ext_resource type="Script" uid="uid://b4emorq00844p" path="res://Scripts/Level/main.gd" id="1_6lraq"]
 [ext_resource type="Script" uid="uid://dqgr8v8btj2sq" path="res://Scripts/Level/world.gd" id="1_isv4o"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="3_htilh"]
 [ext_resource type="Resource" uid="uid://dy2xs84ms6q6x" path="res://Resources/Skins_Nation/United States.tres" id="4_fbwek"]
+[ext_resource type="Resource" uid="uid://djvg20vr4piwl" path="res://Resources/Skins_Nation/France.tres" id="6_htilh"]
+[ext_resource type="Resource" uid="uid://coywh5kuabf1f" path="res://Resources/Skins_Nation/Italy.tres" id="7_61cyj"]
 [ext_resource type="Resource" uid="uid://dnd8jrrd351pf" path="res://Resources/Skins_Nation/China.tres" id="7_c48p2"]
+[ext_resource type="Resource" uid="uid://cysfgs18vrmnn" path="res://Resources/Skins_Nation/South Korea.tres" id="8_nctrm"]
+[ext_resource type="Resource" uid="uid://bic3j2eiaqh5e" path="res://Resources/Skins_Nation/Portugal.tres" id="9_ek4ha"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_6lraq")
@@ -12,7 +16,7 @@ script = ExtResource("1_6lraq")
 [node name="World" type="Node2D" parent="."]
 texture_filter = 1
 script = ExtResource("1_isv4o")
-available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("7_c48p2")])
+available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("7_c48p2"), ExtResource("6_htilh"), ExtResource("7_61cyj"), ExtResource("8_nctrm"), ExtResource("9_ek4ha")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
 

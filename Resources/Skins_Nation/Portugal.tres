@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://dghj04muaj8g2" path="res://Assets/Flag_Nation/Portugal_circle_128x128.png" id="1_i08pp"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_3a7eu"]
-[ext_resource type="Texture2D" uid="uid://bcvcpk4th1lwp" path="res://Assets/Weapon/Iicon_32_37.png" id="3_3a7eu"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_i08pp"]
 
 [resource]
 script = ExtResource("2_3a7eu")
 skin_name = "Portugal"
 core_texture = ExtResource("1_i08pp")
-weapon_texture = ExtResource("3_3a7eu")
+weapon_texture = ExtResource("3_i08pp")
 metadata/_custom_type_script = "uid://c402lff57jg35"

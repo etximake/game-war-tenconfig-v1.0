@@ -58,6 +58,7 @@ var _extra_spawned_by_team: Dictionary = {}
 var _speed_rain_zones: Array[Dictionary] = []
 var _mini_swarm_ids: Dictionary = {}
 var _rule_4_flash_cells: Array[Dictionary] = []
+var _rule_fx_overlay: Node2D = null
 
 var _tick_accumulator: float = 0.0
 
@@ -127,6 +128,7 @@ func start_match() -> void:
 
 	_setup_tick_timer()
 	_setup_escalation_director()
+	_setup_rule_fx_overlay()
 	_apply_speed_all()
 
 
@@ -150,8 +152,9 @@ func _physics_process(_delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	# Giữ hiệu ứng blink của Rule 3 + Rule 4 animate rõ ràng theo frame.
-	if not _speed_rain_zones.is_empty() or not _rule_4_flash_cells.is_empty():
-		queue_redraw()
+	if is_instance_valid(_rule_fx_overlay):
+		if not _speed_rain_zones.is_empty() or not _rule_4_flash_cells.is_empty():
+			_rule_fx_overlay.queue_redraw()
 
 
 
@@ -165,6 +168,17 @@ func _setup_escalation_director() -> void:
 	escalation_director.name = "EscalationDirector"
 	add_child(escalation_director)
 	escalation_director.setup(self)
+
+
+func _setup_rule_fx_overlay() -> void:
+	if _rule_fx_overlay and is_instance_valid(_rule_fx_overlay):
+		_rule_fx_overlay.queue_free()
+	
+	_rule_fx_overlay = Node2D.new()
+	_rule_fx_overlay.name = "RuleFXOverlay"
+	_rule_fx_overlay.z_index = 5  # Above Grid (0) but below HUD and name labels
+	add_child(_rule_fx_overlay)
+	_rule_fx_overlay.draw.connect(_on_overlay_draw)
 
 
 # =========================
@@ -217,8 +231,8 @@ func _process_capture_pressure(delta: float) -> void:
 		_check_win_conditions()
 
 
-func _draw() -> void:
-	if config == null:
+func _on_overlay_draw() -> void:
+	if config == null or not is_instance_valid(_rule_fx_overlay):
 		return
 	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
@@ -228,10 +242,14 @@ func _draw() -> void:
 	for zone in _speed_rain_zones:
 		var p: Vector2 = zone.get("pos", Vector2.ZERO)
 		var alpha: float = clamp(float(zone.get("ttl", 0.0)) / max(float(config.rule_5_zone_ttl_sec), 0.1), 0.25, 1.0)
-		# Draw rect centered on the cell
-		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
-		draw_rect(rect, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha), true)
-		draw_rect(rect.grow(1.0), Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), false, 1.5)
+		
+		# Thu nhỏ đường kính chỉ to bằng 1 ô vuông (bán kính = 0.5 cells)
+		var radius: float = cell_size * 0.7
+		
+		# Draw circle (filled)
+		_rule_fx_overlay.draw_circle(p, radius, Color(1.0, 1.0, 0.35, (0.25 + 0.60 * blink_strength) * alpha))
+		# Draw outline (arc)
+		_rule_fx_overlay.draw_arc(p, radius + 1.0, 0, TAU, 32, Color(1.0, 1.0, 1.0, (0.35 + 0.65 * blink_strength) * alpha), 1.5, true)
 
 	for flash in _rule_4_flash_cells:
 		var p: Vector2 = flash.get("pos", Vector2.ZERO)
@@ -239,8 +257,8 @@ func _draw() -> void:
 		var max_ttl: float = max(float(flash.get("max_ttl", 0.1)), 0.1)
 		var alpha: float = clamp(ttl / max_ttl, 0.2, 1.0)
 		var rect := Rect2(p - Vector2(cell_size * 0.5, cell_size * 0.5), Vector2(cell_size, cell_size))
-		draw_rect(rect, Color(1.0, 0.65, 0.10, (0.30 + 0.70 * blink_strength) * alpha), true)
-		draw_rect(rect.grow(2.0), Color(1.0, 1.0, 1.0, (0.35 + 0.60 * blink_strength) * alpha), false, 2.0)
+		_rule_fx_overlay.draw_rect(rect, Color(1.0, 0.65, 0.10, (0.30 + 0.70 * blink_strength) * alpha), true)
+		_rule_fx_overlay.draw_rect(rect.grow(2.0), Color(1.0, 1.0, 1.0, (0.35 + 0.60 * blink_strength) * alpha), false, 2.0)
 
 	
 func _capture_pressure_map_for_marble(m: Marble) -> Dictionary:
@@ -659,6 +677,10 @@ func _clear_previous_match() -> void:
 		escalation_director.queue_free()
 	escalation_director = null
 
+	if _rule_fx_overlay and is_instance_valid(_rule_fx_overlay):
+		_rule_fx_overlay.queue_free()
+	_rule_fx_overlay = null
+
 	global_speed_mult = 1.0
 	burst_mult = 1.0
 	burst_until_sec = 0.0
@@ -803,18 +825,19 @@ func _spawn_marbles_by_config(n: int, marbles_per_team: int) -> void:
 
 		for i in range(team_spawn_count):
 			var m := MarbleScene.instantiate() as Marble
-			add_child(m)
-
-			var jx: float = rng.randf_range(-cs * 2.0, cs * 2.0)
-			var jy: float = rng.randf_range(-cs * 2.0, cs * 2.0)
-			m.position = base_pos + Vector2(jx, jy)
-
+			
 			m.team_id = clamp(team, 0, team_count - 1)
 			var team_speed_mult: float = _get_rule_mult(GameRuleEvent.RuleType.RULE_2_PARTICIPANT_SPEED, team, 1.0)
 			var team_size_mult: float = _get_rule_mult(GameRuleEvent.RuleType.RULE_1_PARTICIPANT_SIZE, team, 1.0)
 			m.move_speed = float(config.move_speed) * max(team_speed_mult, 0.05)
 			m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(team_speed_mult, 0.05)
 			m.size_scale = float(config.initial_size_scale) * clamp(team_size_mult, 0.2, 4.0)
+
+			var jx: float = rng.randf_range(-cs * 2.0, cs * 2.0)
+			var jy: float = rng.randf_range(-cs * 2.0, cs * 2.0)
+			m.position = base_pos + Vector2(jx, jy)
+
+			add_child(m)
 			m.cache_base_speed()
 
 			m.territory = grid
@@ -1110,7 +1133,7 @@ func _eliminate_marbles_outside_play_rect() -> void:
 			marbles.remove_at(i)
 
 
-func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mult: float = 1.0, lifetime_sec: float = 0.0, from_center: bool = true) -> void:
+func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mult: float = 1.0, lifetime_sec: float = 0.0, from_center: bool = true, show_label: bool = true) -> void:
 	if team < 0 or team >= team_count:
 		return
 	if not is_instance_valid(grid) or config == null:
@@ -1121,21 +1144,25 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 	var spawn_marker_pos: Vector2 = anchor_pos
 
 	var m := MarbleScene.instantiate() as Marble
-	add_child(m)
-	m.position = anchor_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
-	spawn_marker_pos = m.position
+	
+	m.team_id = clamp(team, 0, team_count - 1)
+	m.move_speed = float(config.move_speed) * max(speed_mult, 0.1)
+	m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(speed_mult, 0.1)
+	m.size_scale = float(config.initial_size_scale) * clamp(scale_mult, 0.2, 0.85)
 
+	m.position = anchor_pos + Vector2(rng.randf_range(-cs, cs), rng.randf_range(-cs, cs))
 	if not from_center:
 		var team_cells: Array[Vector2i] = _get_owned_cells_for_team(team)
 		if not team_cells.is_empty():
 			var pick: Vector2i = team_cells[rng.randi_range(0, team_cells.size() - 1)]
 			m.position = grid.call("cell_to_world", pick) + Vector2(cs * 0.5, cs * 0.5)
-			spawn_marker_pos = m.position
-
-	m.team_id = clamp(team, 0, team_count - 1)
-	m.move_speed = float(config.move_speed) * max(speed_mult, 0.1)
-	m.weapon_rotate_speed = float(config.weapon_rotate_speed) * max(speed_mult, 0.1)
-	m.size_scale = float(config.initial_size_scale) * clamp(scale_mult, 0.2, 0.85)
+	
+	spawn_marker_pos = m.position
+	add_child(m)
+	
+	# Give temporary immunity to prevent immediate teleport/bounce
+	if "_territory_immunity_left" in m:
+		m.set("_territory_immunity_left", 0.5)
 	m.cache_base_speed()
 	m.territory = grid
 	if available_skins.size() > 0:
@@ -1146,9 +1173,11 @@ func _spawn_custom_marble_for_team(team: int, scale_mult: float = 1.0, speed_mul
 	if not from_center:
 		_register_rule_4_flash_cell(spawn_marker_pos)
 
-	if lifetime_sec > 0.0:
+	if not show_label:
 		if m.skin_label:
 			m.skin_label.visible = false
+
+	if lifetime_sec > 0.0:
 		var id := m.get_instance_id()
 		_mini_swarm_ids[id] = true
 		var t := get_tree().create_timer(lifetime_sec)
@@ -1189,6 +1218,15 @@ func _get_team_spawn_anchor(team: int) -> Vector2:
 		var cs: float = float(config.grid_cell_size)
 		return grid.call("cell_to_world", pick) + Vector2(cs * 0.5, cs * 0.5)
 
+	# FALLBACK: Return the center of the initial region instead of random map pos
+	var regions := _build_regions_in_cells(team_count)
+	if team >= 0 and team < regions.size():
+		var rect: Rect2i = regions[team]
+		var cx: int = rect.position.x + int(floor(float(rect.size.x) * 0.5))
+		var cy: int = rect.position.y + int(floor(float(rect.size.y) * 0.5))
+		var cs: float = float(config.grid_cell_size)
+		return grid.call("cell_to_world", Vector2i(cx, cy)) + Vector2(cs * 0.5, cs * 0.5)
+
 	return Vector2(
 		rng.randf_range(0.0, float(config.grid_width) * float(config.grid_cell_size)),
 		rng.randf_range(0.0, float(config.grid_height) * float(config.grid_cell_size))
@@ -1212,7 +1250,7 @@ func _get_owned_cells_for_team(team: int) -> Array[Vector2i]:
 
 
 func _spawn_extra_marble_for_team(team: int, scale_mult: float = 1.0) -> void:
-	_spawn_custom_marble_for_team(team, scale_mult, 1.0, 0.0, true)
+	_spawn_custom_marble_for_team(team, scale_mult, 1.0, 0.0, true, true)
 
 
 func _remove_marble_if_alive(instance_id: int) -> void:
@@ -1279,7 +1317,7 @@ func _update_speed_rain(delta: float) -> void:
 	if _speed_rain_zones.is_empty() and _rule_4_flash_cells.is_empty():
 		return
 
-	var zone_radius: float = float(config.grid_cell_size) * max(float(config.rule_5_zone_radius_cells), 0.5)
+	var zone_radius: float = float(config.grid_cell_size) * 0.5
 	for i in range(_speed_rain_zones.size() - 1, -1, -1):
 		var zone := _speed_rain_zones[i]
 		zone["ttl"] = float(zone.get("ttl", 0.0)) - delta
@@ -1347,7 +1385,8 @@ func rule_infinite_spawn_tick() -> void:
 			float(config.rule_4_small_size_mult),
 			float(config.rule_4_small_speed_mult),
 			float(config.rule_4_spawn_lifetime_sec),
-			false
+			false,
+			false # rule_4 does not show labels
 		)
 
 

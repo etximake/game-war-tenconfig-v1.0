@@ -6,17 +6,14 @@
 
 [resource]
 script = ExtResource("1")
-num_teams = 2
+num_teams = 6
 move_speed = 280.0
 accel = 1500.0
 max_size_scale = 1.8
 combat_bias_strength = 0.5
 combat_sample_radius = 2
 marbles_per_team = 2
-team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1)])
-grid_cell_size = 17
-grid_width = 32
-grid_height = 62
+team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(0.91840714, 0.6987591, 0.7018643, 1), Color(0.92156863, 0.69803923, 0, 1), Color(0.13812509, 0.47889155, 0.39315826, 1), Color(0.36718947, 0.24341053, 0.17251363, 1)])
 rule_1_marble_names = null
 rule_1_team_mult = null
 rule_2_marble_names = null
@@ -25,9 +22,9 @@ rule_3_marble_names = null
 rule_3_team_mult = null
 rule_4_enabled = true
 rule_4_marble_names = null
-rule_4_period_sec = 3.0
-rule_4_small_size_mult = 0.5
-rule_4_swarm_count_min = 5
+rule_4_small_speed_mult = 1.0
+rule_4_swarm_count_min = 2
 rule_4_swarm_count_max = 5
+rule_4_spawn_lifetime_sec = 5.0
 rule_5_enabled = true
 rule_5_marble_names = null
