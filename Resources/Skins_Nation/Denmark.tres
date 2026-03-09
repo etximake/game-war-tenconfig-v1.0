@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://caf3f1x07j5uf" path="res://Assets/Flag_Nation/Denmark_circle_128x128.png" id="1_xeadk"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_sdjhp"]
-[ext_resource type="Texture2D" uid="uid://bt7h01i8w4ult" path="res://Assets/Weapon/Iicon_32_33.png" id="3_murin"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_xeadk"]
 
 [resource]
 script = ExtResource("2_sdjhp")
 skin_name = "Denmark"
 core_texture = ExtResource("1_xeadk")
-weapon_texture = ExtResource("3_murin")
+weapon_texture = ExtResource("3_xeadk")
 metadata/_custom_type_script = "uid://c402lff57jg35"

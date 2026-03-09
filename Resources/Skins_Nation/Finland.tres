@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://v743j1xag47b" path="res://Assets/Flag_Nation/Finland_circle_128x128.png" id="1_qapk1"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_1p114"]
-[ext_resource type="Texture2D" uid="uid://cchhekthxvv1n" path="res://Assets/Weapon/Iicon_32_21.png" id="3_1p114"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_qapk1"]
 
 [resource]
 script = ExtResource("2_1p114")
 skin_name = "Finland"
 core_texture = ExtResource("1_qapk1")
-weapon_texture = ExtResource("3_1p114")
+weapon_texture = ExtResource("3_qapk1")
 metadata/_custom_type_script = "uid://c402lff57jg35"
