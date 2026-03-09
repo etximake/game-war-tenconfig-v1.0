@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://cwaee646vgjg6" path="res://Assets/Flag_Nation/China_circle_128x128.png" id="1_wetol"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_suslc"]
-[ext_resource type="Texture2D" uid="uid://bnfl0b60nlpfp" path="res://Assets/Weapon/Iicon_32_08.png" id="3_suslc"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_wetol"]
 
 [resource]
 script = ExtResource("2_suslc")
 skin_name = "China"
 core_texture = ExtResource("1_wetol")
-weapon_texture = ExtResource("3_suslc")
+weapon_texture = ExtResource("3_wetol")
 metadata/_custom_type_script = "uid://c402lff57jg35"

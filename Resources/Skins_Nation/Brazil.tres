@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://bjo7ehbloct0c" path="res://Assets/Flag_Nation/Brazil_circle_128x128.png" id="1_bpues"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_afi01"]
-[ext_resource type="Texture2D" uid="uid://byofmmtpgxarg" path="res://Assets/Weapon/Iicon_32_36.png" id="3_afi01"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_bpues"]
 
 [resource]
 script = ExtResource("2_afi01")
 skin_name = "Brazil"
 core_texture = ExtResource("1_bpues")
-weapon_texture = ExtResource("3_afi01")
+weapon_texture = ExtResource("3_bpues")
 metadata/_custom_type_script = "uid://c402lff57jg35"

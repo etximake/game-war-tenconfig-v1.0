@@ -11,7 +11,24 @@ class_name GameConfig
 @export var win_territory_ratio: float = 0.98
 
 # =========================
-# territory
+# MARBLE GROUP (Lực Chiến Bi)
+# =========================
+@export_group("marble_combat")
+@export var move_speed: float = 240.0
+@export var accel: float = 2200.0
+@export var max_turn_rate: float = 7.5
+@export var turn_speed: float = 10.0
+@export var bias_update_hz: float = 10.0
+@export var weapon_rotate_speed: float = 5.0
+@export var initial_size_scale: float = 0.5
+@export var growth_step: float = 0.08
+@export var max_size_scale: float = 2.2
+@export var combat_bias_strength: float = 0.9
+@export var combat_sample_radius: int = 6
+@export var marbles_per_team: int = 1
+
+# =========================
+# territory (Bản Đồ & Chiếm Đóng)
 # =========================
 @export_group("territory")
 @export var team_colors: Array[Color] = [
@@ -24,77 +41,76 @@ class_name GameConfig
 	Color.WHITE,
 	Color(1.0, 0.5, 0.0, 1.0)
 ]
-@export var grid_cell_size: int = 16
+@export var grid_cell_size: int = 24
 @export var grid_width: int = 80
 @export var grid_height: int = 45
 
-# =========================
-# marble
-# =========================
-@export_group("marble")
-@export var move_speed: float = 240.0
-@export var weapon_rotate_speed: float = 5.0
-@export var initial_size_scale: float = 0.5
-@export var growth_step: float = 0.08
-@export var max_size_scale: float = 2.2
-@export var capture_radius: float = 72.0
+@export_subgroup("capture_logic")
+@export var paint_thickness: int = 0
+@export var capture_inner_margin_ratio: float = 0.12
+@export var capture_substeps_per_cell: int = 6
+@export var capture_pressure_per_tick: float = 1.0
+@export var capture_threshold: float = 3.0
+@export var capture_decay_per_tick: float = 0.8
+@export var capture_line_pressure_bonus: float = 1.2
+@export var capture_min_contact_samples: int = 2
+
+@export_subgroup("physics_block")
+@export var territory_block_enabled: bool = true
+@export var territory_bounce_factor: float = 0.85
+@export var territory_push_speed: float = 80.0
 
 # =========================
-# spawn
+# game_rules
 # =========================
-@export_group("spawn")
-@export var marbles_per_team: int = 1
+@export_group("game_rules")
+
+@export_subgroup("rule_1_participant_size")
+@export var rule_1_enabled: bool = false
+@export var rule_1_marble_names: PackedStringArray = PackedStringArray()
+@export var rule_1_team_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+@export_subgroup("rule_2_participant_speed")
+@export var rule_2_enabled: bool = false
+@export var rule_2_marble_names: PackedStringArray = PackedStringArray()
+@export var rule_2_team_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+@export_subgroup("rule_3_participant_count")
+@export var rule_3_enabled: bool = false
+@export var rule_3_marble_names: PackedStringArray = PackedStringArray()
+@export var rule_3_team_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+@export_subgroup("rule_4_spawn_pressure")
+@export var rule_4_enabled: bool = false
+@export var rule_4_marble_names: PackedStringArray = PackedStringArray()
+@export var rule_4_period_sec: float = 10.0
+@export var rule_4_small_speed_mult: float = 1.35
+@export var rule_4_small_size_mult: float = 0.7
+@export var rule_4_stop_fill_ratio: float = 0.96
+@export var rule_4_swarm_count_min: int = 1
+@export var rule_4_swarm_count_max: int = 1
+@export var rule_4_spawn_lifetime_sec: float = 0.0
+
+@export_subgroup("rule_5_speed_rain")
+@export var rule_5_enabled: bool = false
+@export var rule_5_marble_names: PackedStringArray = PackedStringArray()
+@export var rule_5_period_sec: float = 6.0
+@export var rule_5_zone_count: int = 6
+@export var rule_5_zone_radius_cells: float = 1.0
+@export var rule_5_boost_mult: float = 1.7
+@export var rule_5_boost_duration_min_sec: float = 2.0
+@export var rule_5_boost_duration_max_sec: float = 3.0
+@export var rule_5_zone_ttl_sec: float = 4.0
+@export var rule_5_random_direction_enabled: bool = true
+@export var rule_5_angle_min_deg: float = 30.0
+@export var rule_5_angle_max_deg: float = 180.0
 
 # =========================
-# participant_rules
+# automation
 # =========================
-@export_group("participant_rules")
-@export var participant_rules_enabled: bool = true
-@export var participant_team_size_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
-@export var participant_team_speed_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
-@export var participant_team_count_mult: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0])
-
-# =========================
-# escalation_rules (đã hợp nhất: 2+4 và 3+5)
-# =========================
-@export_group("escalation_rules")
-@export_subgroup("rule_2_spawn_pressure (merged with old rule_4_mini_marble_swarm)")
-@export var rule_2_enabled: bool = true
-@export var rule_2_start_delay_sec: float = 10.0
-@export var rule_2_period_sec: float = 10.0
-@export var rule_2_small_speed_mult: float = 1.35
-@export var rule_2_small_size_mult: float = 0.7
-@export var rule_2_stop_fill_ratio: float = 0.96
-@export var rule_2_swarm_count_min: int = 1
-@export var rule_2_swarm_count_max: int = 1
-@export var rule_2_spawn_lifetime_sec: float = 0.0
-@export var rule_2_enabled_marble_types: PackedStringArray = PackedStringArray()
-
-@export_subgroup("rule_3_speed_rain (merged with old rule_5_random_direction_boost)")
-@export var rule_3_enabled: bool = true
-@export var rule_3_period_sec: float = 6.0
-@export var rule_3_zone_count: int = 6
-@export var rule_3_zone_radius_cells: float = 1.0
-@export var rule_3_boost_mult: float = 1.7
-@export var rule_3_boost_duration_min_sec: float = 2.0
-@export var rule_3_boost_duration_max_sec: float = 3.0
-@export var rule_3_zone_ttl_sec: float = 4.0
-@export var rule_3_random_direction_enabled: bool = true
-@export var rule_3_angle_min_deg: float = 30.0
-@export var rule_3_angle_max_deg: float = 180.0
-
-# Legacy aliases để không làm vỡ preset cũ (rule 4,5)
-@export_storage var rule_4_enabled: bool = true
-@export_storage var rule_4_period_sec: float = 15.0
-@export_storage var rule_4_swarm_count_min: int = 5
-@export_storage var rule_4_swarm_count_max: int = 10
-@export_storage var rule_4_mini_lifetime_sec: float = 6.0
-@export_storage var rule_4_mini_speed_mult: float = 1.45
-@export_storage var rule_4_mini_size_mult: float = 0.6
-@export_storage var rule_4_flash_cell_ttl_sec: float = 0.9
-@export_storage var rule_5_enabled: bool = true
-@export_storage var rule_5_angle_min_deg: float = 30.0
-@export_storage var rule_5_angle_max_deg: float = 180.0
+@export_group("automation")
+@export var automation_preset_enabled: bool = false
+@export var automation_timeline: Array[GameRuleEvent] = []
 
 # =========================
 # fx
@@ -109,10 +125,7 @@ class_name GameConfig
 @export_group("ui")
 @export var show_hud: bool = true
 @export var hud_update_hz: float = 4.0
-
-# =========================
-# content
-# =========================
+@export var show_marble_labels: bool = true
 
 # =========================
 # tooling

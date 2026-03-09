@@ -1,35 +1,35 @@
-[gd_resource type="Resource" script_class="GameConfig" load_steps=3 format=3 uid="uid://5hqy3anh0ycf"]
+[gd_resource type="Resource" script_class="GameConfig" load_steps=4 format=3 uid="uid://5hqy3anh0ycf"]
 
 [ext_resource type="Script" uid="uid://colug3a3offek" path="res://Scripts/Systems/game_config.gd" id="1"]
+[ext_resource type="Script" uid="uid://bewwjj3wwi3dc" path="res://Scripts/Systems/game_rule_event.gd" id="1_hd6tg"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="1_u114o"]
 
 [resource]
 script = ExtResource("1")
-num_teams = 2
-tick_rate = 12.0
-team_colors = Array[Color]([Color(1, 0.1171875, 0, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(1, 1, 0, 1), Color(1, 0, 1, 1), Color(0, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 0.5, 0, 1)])
-grid_cell_size = 24
-move_speed = 170.0
-weapon_rotate_speed = 4.0
+num_teams = 6
+move_speed = 280.0
+accel = 1500.0
+max_size_scale = 1.8
+combat_bias_strength = 0.5
+combat_sample_radius = 2
 marbles_per_team = 2
-participant_rules_enabled = false
-participant_team_size_mult = PackedFloat32Array(2.5, 0.4)
-participant_team_speed_mult = PackedFloat32Array(0.7, 2)
-participant_team_count_mult = PackedFloat32Array(1, 20)
-rule_2_enabled = false
-rule_2_start_delay_sec = 15.0
-rule_2_period_sec = 15.0
-rule_2_small_speed_mult = 1.4
-rule_2_small_size_mult = 0.3
-rule_2_swarm_count_min = 2
-rule_2_swarm_count_max = 6
-rule_2_spawn_lifetime_sec = 10.0
-rule_2_enabled_marble_types = PackedStringArray("Hawaii")
-rule_3_enabled = false
-rule_3_boost_mult = 1.8
-rule_3_random_direction_enabled = false
-rule_4_mini_speed_mult = 2.0
-rule_4_mini_size_mult = 0.4
-rule_5_enabled = false
-explosion_radius_cells = 5
-show_hud = false
+team_colors = Array[Color]([Color(0.22745098, 0.5254902, 1, 1), Color(0.1158905, 0.84765625, 0.36743498, 1), Color(0.9843137, 0.3372549, 0.02745098, 1), Color(0.5137255, 0.21960784, 0.9254902, 1), Color(0.18039216, 0.76862746, 0.7137255, 1), Color(1, 0.74509805, 0.043137256, 1)])
+rule_1_marble_names = null
+rule_1_team_mult = null
+rule_2_marble_names = null
+rule_2_team_mult = null
+rule_3_marble_names = null
+rule_3_team_mult = null
+rule_4_enabled = true
+rule_4_marble_names = null
+rule_4_period_sec = 20.0
+rule_4_small_speed_mult = 0.9
+rule_4_small_size_mult = 0.5
+rule_4_swarm_count_min = 2
+rule_4_swarm_count_max = 4
+rule_4_spawn_lifetime_sec = 5.0
+rule_5_enabled = true
+rule_5_marble_names = null
+rule_5_period_sec = 30.0
+rule_5_zone_count = 5
+rule_5_boost_duration_max_sec = 5.0

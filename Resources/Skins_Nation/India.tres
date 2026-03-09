@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://5pa6gfopbqa2" path="res://Assets/Flag_Nation/India_circle_128x128.png" id="1_1hvfn"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_k0nob"]
-[ext_resource type="Texture2D" uid="uid://6uhtnghacxj7" path="res://Assets/Weapon/Iicon_32_18.png" id="3_k0nob"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_1hvfn"]
 
 [resource]
 script = ExtResource("2_k0nob")
 skin_name = "India"
 core_texture = ExtResource("1_1hvfn")
-weapon_texture = ExtResource("3_k0nob")
+weapon_texture = ExtResource("3_1hvfn")
 metadata/_custom_type_script = "uid://c402lff57jg35"

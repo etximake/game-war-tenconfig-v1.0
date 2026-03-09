@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://dx1wvn2ho4g7i" path="res://Assets/Flag_Nation/Sweden_circle_128x128.png" id="1_yj8c3"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_bqqgc"]
-[ext_resource type="Texture2D" uid="uid://b22hnnwvwoip7" path="res://Assets/Weapon/Iicon_32_10.png" id="3_wud8p"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_yj8c3"]
 
 [resource]
 script = ExtResource("2_bqqgc")
 skin_name = "Sweden"
 core_texture = ExtResource("1_yj8c3")
-weapon_texture = ExtResource("3_wud8p")
+weapon_texture = ExtResource("3_yj8c3")
 metadata/_custom_type_script = "uid://c402lff57jg35"

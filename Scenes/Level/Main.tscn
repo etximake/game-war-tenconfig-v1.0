@@ -1,10 +1,14 @@
-[gd_scene load_steps=6 format=3 uid="uid://d1w7d1dtglwsw"]
+[gd_scene load_steps=10 format=3 uid="uid://d1w7d1dtglwsw"]
 
 [ext_resource type="Script" uid="uid://b4emorq00844p" path="res://Scripts/Level/main.gd" id="1_6lraq"]
 [ext_resource type="Script" uid="uid://dqgr8v8btj2sq" path="res://Scripts/Level/world.gd" id="1_isv4o"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="3_htilh"]
-[ext_resource type="Resource" uid="uid://rxhns2xea0hs" path="res://Resources/Skins_USA/New York.tres" id="4_fbwek"]
-[ext_resource type="Resource" uid="uid://toui7e5f43qq" path="res://Resources/Skins_USA/Hawaii.tres" id="5_pcup4"]
+[ext_resource type="Resource" uid="uid://ctjl34mdhp037" path="res://Resources/Skins_Nation/Sweden.tres" id="4_htilh"]
+[ext_resource type="Resource" uid="uid://ck7tkr71f00fi" path="res://Resources/Skins_Nation/Iceland.tres" id="5_61cyj"]
+[ext_resource type="Resource" uid="uid://bnuahp5gcksa0" path="res://Resources/Skins_Nation/Norway.tres" id="6_nctrm"]
+[ext_resource type="Resource" uid="uid://ds4ry7qwq88c2" path="res://Resources/Skins_Nation/Denmark.tres" id="7_ek4ha"]
+[ext_resource type="Resource" uid="uid://744op0mmii8a" path="res://Resources/Skins_Nation/Finland.tres" id="8_de806"]
+[ext_resource type="Resource" uid="uid://bjj211pht0h1f" path="res://Resources/Skins_Nation/Estonia.tres" id="9_5ymhi"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_6lraq")
@@ -12,8 +16,7 @@ script = ExtResource("1_6lraq")
 [node name="World" type="Node2D" parent="."]
 texture_filter = 1
 script = ExtResource("1_isv4o")
-team_count = 2
-available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtResource("5_pcup4")])
+available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_htilh"), ExtResource("5_61cyj"), ExtResource("6_nctrm"), ExtResource("7_ek4ha"), ExtResource("8_de806"), ExtResource("9_5ymhi")])
 
 [node name="Camera2D" type="Camera2D" parent="."]
 
@@ -21,8 +24,12 @@ available_skins = Array[ExtResource("3_htilh")]([ExtResource("4_fbwek"), ExtReso
 offset = Vector2(5, 5)
 transform = Transform2D(1, 0, 0, 1, 5, 5)
 
-[node name="HUD" type="Label" parent="UI"]
+[node name="HUD" type="RichTextLabel" parent="UI"]
+anchors_preset = -1
+anchor_right = 0.13645834
+anchor_bottom = 0.11296296
 offset_right = 40.0
 offset_bottom = 23.0
+bbcode_enabled = true
 text = "HUD"
 metadata/_edit_use_anchors_ = true

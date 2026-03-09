@@ -2,11 +2,11 @@
 
 [ext_resource type="Texture2D" uid="uid://6c7rw1qarr38" path="res://Assets/Flag_Nation/United_States_circle_128x128.png" id="1_0jvwi"]
 [ext_resource type="Script" uid="uid://c402lff57jg35" path="res://Resources/marble_skin.gd" id="2_835tt"]
-[ext_resource type="Texture2D" uid="uid://3yo4eyilh2ow" path="res://Assets/Weapon/Iicon_32_01.png" id="3_5a5b5"]
+[ext_resource type="Texture2D" uid="uid://0yhimch5kabu" path="res://Assets/Weapon_ns/knife.svg" id="3_0jvwi"]
 
 [resource]
 script = ExtResource("2_835tt")
-skin_name = "United States"
+skin_name = "USA"
 core_texture = ExtResource("1_0jvwi")
-weapon_texture = ExtResource("3_5a5b5")
+weapon_texture = ExtResource("3_0jvwi")
 metadata/_custom_type_script = "uid://c402lff57jg35"

@@ -7,6 +7,15 @@ class_name Marble
 # =========================
 var team_id: int = 0
 var move_speed: float = 320.0
+var speed: float:
+	get:
+		return move_speed
+	set(value):
+		move_speed = value
+var accel: float = 2200.0
+var max_turn_rate: float = 7.5
+var squash_strength: float = 0.08
+var squash_time: float = 0.12
 var weapon_rotate_speed: float = 8.0
 var kill_count: int = 0
 
@@ -15,6 +24,7 @@ var _base_weapon_rotate_speed: float = 8.0
 var _external_speed_mult: float = 1.0
 var _temp_boost_mult: float = 1.0
 var _temp_boost_left_sec: float = 0.0
+const MAX_SPEED: float = 2500.0
 
 # ===== Simulation gate (intro mode) =====
 static var SIM_RUNNING: bool = false   # tất cả marble dùng chung
@@ -45,21 +55,29 @@ var _dir_timer: float = 0.0
 @export var base_dir_change_time_max: float = 3.5
 @export var base_dir_jitter_deg: float = 12.0  # nhỏ để bớt rung
 
-@export var bias_strength: float = 0.9
-@export var sample_radius_cells: int = 1
-
-@export var turn_speed: float = 10.0
-@export var bias_update_hz: float = 10.0
+var bias_strength: float = 0.9
+var sample_radius_cells: int = 1
+var turn_speed: float = 10.0
+var bias_update_hz: float = 10.0
 
 var territory: Node = null
 
 # internal movement state
 var _move_dir: Vector2 = Vector2.RIGHT
 var _desired_velocity: Vector2 = Vector2.ZERO
+var _current_velocity: Vector2 = Vector2.ZERO
+var _prev_target_dir: Vector2 = Vector2.RIGHT
+var _turn_squash_cooldown_left: float = 0.0
 
 var _bias_timer: float = 0.0
 var _cached_bias_dir: Vector2 = Vector2.ZERO
 var _wall_cooldown: float = 0.0
+
+# Sweep hit state
+var _sweep_knockback_vel: Vector2 = Vector2.ZERO
+var _sweep_spin_tween: Tween = null
+var _knockback_tween: Tween = null
+var capture_power_mult: float = 1.0
 
 # =========================
 # Node refs (scene structure)
@@ -73,7 +91,6 @@ var _wall_cooldown: float = 0.0
 @onready var weapon_sprite: Sprite2D = $WeaponPivot/Weapon/WeaponSprite
 @onready var skin_label: Label = $Name
 
-# ✅ Weapon tip (B-1)
 @onready var weapon_tip: Marker2D = get_node_or_null("WeaponPivot/Weapon/WeaponTip")
 
 # =========================
@@ -88,19 +105,46 @@ var _base_weapon_offset: Vector2 = Vector2(22.0, 0.0)
 var _base_core_sprite_scale: Vector2 = Vector2.ONE
 var _base_weapon_sprite_scale: Vector2 = Vector2.ONE
 
-@export var territory_block_enabled: bool = true
-@export var territory_bounce_factor: float = 0.85
-@export var territory_push_speed: float = 80.0
-@export var territory_blocks_neutral: bool = false  # giữ FALSE để không kẹt ở neutral
+var _base_core_pos: Vector2 = Vector2.ZERO
+var _base_weapon_pivot_pos: Vector2 = Vector2.ZERO
+
+var territory_block_enabled: bool = true
+var territory_bounce_factor: float = 0.85
+var territory_push_speed: float = 80.0
+var territory_blocks_neutral: bool = false
 
 var _last_safe_pos: Vector2 = Vector2.ZERO
 var _has_safe_pos: bool = false
+var _turn_squash_tween: Tween = null
+var _capture_squash_tween: Tween = null
+var _visual_scale_mult_value: Vector2 = Vector2.ONE
+var _visual_scale_mult: Vector2:
+	get:
+		return _visual_scale_mult_value
+	set(value):
+		_visual_scale_mult_value = value
+		_apply_visual_scale_multiplier()
 
 
 # Optional skin resource
 var skin = null
 
 signal team_changed(marble: Marble, new_team: int)
+signal marble_stuck(node: Marble, pos: Vector2, team: int, is_stuck: bool)
+
+var _territory_immunity_left: float = 0.0
+var _stuck_sec: float = 0.0
+var _is_sos: bool = false
+var _sos_tween: Tween = null
+var _orig_label_text: String = ""
+# Tween refs để kill trước khi tạo mới (tránh Tween orphan gây lag)
+var _pierce_tween: Tween = null
+var _power_tween: Tween = null
+var _ws_tween: Tween = null
+var _rescue_timer: float = 0.0
+var _last_pos_check: Vector2 = Vector2.ZERO
+var _pos_check_timer: float = 0.0
+var _sos_release_timer: float = 0.0  # đếm ngược sau khi giải thoát trước khi xóa Help!
 
 func _ready() -> void:
 	can_sleep = false
@@ -109,7 +153,21 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	_last_safe_pos = global_position
 	_has_safe_pos = true
+	if App.config != null:
+		accel = App.config.accel
+		max_turn_rate = App.config.max_turn_rate
+		turn_speed = App.config.turn_speed
+		bias_update_hz = App.config.bias_update_hz
+		bias_strength = App.config.combat_bias_strength
+		sample_radius_cells = App.config.combat_sample_radius
+		territory_block_enabled = App.config.territory_block_enabled
+		territory_bounce_factor = App.config.territory_bounce_factor
+		territory_push_speed = App.config.territory_push_speed
+		move_speed = App.config.move_speed
+		weapon_rotate_speed = App.config.weapon_rotate_speed
+
 	_base_move_speed = move_speed
+	speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
 
 	if core_shape and core_shape.shape:
@@ -125,9 +183,13 @@ func _ready() -> void:
 
 	_randomize_base_dir()
 	_move_dir = base_dir
+	_prev_target_dir = _move_dir
+	_current_velocity = _move_dir * move_speed
 	_reset_dir_timer()
 	_bias_timer = 0.0
 	_wall_cooldown = 0.0
+	_last_pos_check = global_position
+	_pos_check_timer = 0.0
 
 	collision_layer = 1
 	collision_mask = 1
@@ -158,17 +220,69 @@ func _physics_process(delta: float) -> void:
 
 	# Nếu chưa start -> đứng yên, không update AI dir/bias
 	if not SIM_RUNNING:
+		_current_velocity = _current_velocity.move_toward(Vector2.ZERO, accel * delta)
 		_desired_velocity = Vector2.ZERO
 		_update_skin_label_position()
 		return
 
 	if _wall_cooldown > 0.0:
 		_wall_cooldown = max(_wall_cooldown - delta, 0.0)
+	if _turn_squash_cooldown_left > 0.0:
+		_turn_squash_cooldown_left = max(_turn_squash_cooldown_left - delta, 0.0)
 	if _temp_boost_left_sec > 0.0:
 		_temp_boost_left_sec = max(_temp_boost_left_sec - delta, 0.0)
 		if _temp_boost_left_sec <= 0.0:
 			_temp_boost_mult = 1.0
 			_recompute_speed()
+	if _territory_immunity_left > 0.0:
+		_territory_immunity_left = max(_territory_immunity_left - delta, 0.0)
+	if _rescue_timer > 0.0:
+		_rescue_timer = max(_rescue_timer - delta, 0.0)
+
+	# =====================================================================
+	# STUCK DETECTION: 2 pha (TH1: weapon tu giai thoat, TH2: Help!)
+	# =====================================================================
+	if SIM_RUNNING:
+		_pos_check_timer += delta
+		if _pos_check_timer >= 0.2:
+			if _stuck_sec > 0.0 or _is_sos:
+				# Khi dang stuck/SOS: check land tho truc tiep (bo qua immunity) de biet marble co tu giai thoat khong
+				if _is_blocked_by_enemy_territory():
+					# Van bi block, chi tang khi chua SOS
+					if not _is_sos:
+						_stuck_sec += _pos_check_timer
+						# Kiem tra lai ngay vi _pos_check_timer se = 0 sau day
+				else:
+					# Vung xung quanh da duoc weapon quet sang team minh → tu giai thoat
+					_stuck_sec = max(_stuck_sec - _pos_check_timer * 3.0, 0.0)
+			else:
+				# Binh thuong: check displacement de phat hien stuck
+				var dist := global_position.distance_to(_last_pos_check)
+				if dist < 5.0 and move_speed > 50.0:
+					_stuck_sec += _pos_check_timer
+				else:
+					_stuck_sec = max(_stuck_sec - _pos_check_timer * 2.0, 0.0)
+
+			_last_pos_check = global_position
+			_pos_check_timer = 0.0
+
+		# TH2: stuck qua lau (>1.2s), weapon khong tu giai thoat duoc → show Help!
+		if _stuck_sec > 1.2 and not _is_sos:
+			_set_sos_state(true)
+			_sos_release_timer = 0.0
+		elif _stuck_sec <= 0.0 and _is_sos:
+			if _sos_release_timer <= 0.0:
+				_sos_release_timer = 0.2  # giu 0.2s roi moi xoa Help!
+
+	# TH1 + TH2: duy tri immunity de marble khong bi teleport (giu nguyen vi tri mac ket)
+	if _stuck_sec > 0.0 or _is_sos:
+		_territory_immunity_left = 0.3
+
+	# Dem nguoc release SOS
+	if _sos_release_timer > 0.0:
+		_sos_release_timer -= delta
+		if _sos_release_timer <= 0.0 and _is_sos and _stuck_sec <= 0.0:
+			_set_sos_state(false)
 
 	_update_base_dir(delta)
 
@@ -180,15 +294,39 @@ func _physics_process(delta: float) -> void:
 		else:
 			_cached_bias_dir = Vector2.ZERO
 
-	var target_dir := base_dir + _cached_bias_dir * bias_strength
+	var target_dir := base_dir
+	if _rescue_timer <= 0.0:
+		target_dir = base_dir + _cached_bias_dir * bias_strength
+	
 	if target_dir.length() < 0.001:
 		target_dir = base_dir
 	target_dir = target_dir.normalized()
 
-	var t: float = clamp(turn_speed * delta, 0.0, 1.0)
-	_move_dir = _move_dir.slerp(target_dir, t).normalized()
+	var current_dir: Vector2 = _move_dir if _move_dir.length() > 0.001 else target_dir
+	var angle_delta: float = wrapf(target_dir.angle() - current_dir.angle(), -PI, PI)
+	var max_step: float = maxf(max_turn_rate, 0.01) * delta
+	var turn_step: float = clampf(angle_delta, -max_step, max_step)
+	_move_dir = current_dir.rotated(turn_step).normalized()
 
-	_desired_velocity = _move_dir * move_speed
+	var sharp_turn_ratio: float = absf(angle_delta) / PI
+	var eased_speed_ratio: float = lerpf(1.0, 0.82, smoothstep(0.35, 1.0, sharp_turn_ratio))
+	var desired_velocity: Vector2 = _move_dir * move_speed * eased_speed_ratio
+	_current_velocity = _current_velocity.move_toward(desired_velocity, maxf(accel, 1.0) * delta)
+	_desired_velocity = _current_velocity
+
+	var target_changed: bool = _prev_target_dir.dot(target_dir) < 0.90
+	var is_hard_turn: bool = absf(angle_delta) > 0.40 and absf(turn_step) >= max_step * 0.8
+	if (target_changed or is_hard_turn) and _turn_squash_cooldown_left <= 0.0:
+		_play_turn_squash()
+		_turn_squash_cooldown_left = clampf(squash_time * 0.65, 0.05, 0.12)
+	_prev_target_dir = target_dir
+
+	# Khi marble bi ket (TH1 hoac TH2): giu nguyen vi tri, chi weapon quay
+	# Override velocity SAU KHI movement AI da tinh toan xong
+	if _stuck_sec > 0.0 or _is_sos:
+		_current_velocity = Vector2.ZERO
+		_desired_velocity = Vector2.ZERO
+
 	_update_skin_label_position()
 
 
@@ -214,6 +352,7 @@ func _on_weapon_body_entered(body: Node) -> void:
 		return
 
 	victim.set_team(team_id)
+	victim.apply_sweep_hit(global_position)
 
 	kill_count += 1
 	if App.config != null:
@@ -266,7 +405,12 @@ func _update_skin_label_text() -> void:
 		return
 	var t := _get_skin_display_name()
 	skin_label.text = t
-	skin_label.visible = (t != "")
+	
+	var show_labels: bool = true
+	if App.config != null:
+		show_labels = App.config.show_marble_labels
+		
+	skin_label.visible = (show_labels and t != "") or _is_sos # Stay visible if SOS
 
 func _update_skin_label_position() -> void:
 	if skin_label == null or not skin_label.visible:
@@ -309,6 +453,7 @@ func _on_weapon_area_entered(area: Area2D) -> void:
 
 func cache_base_speed() -> void:
 	_base_move_speed = move_speed
+	speed = move_speed
 	_base_weapon_rotate_speed = weapon_rotate_speed
 	_external_speed_mult = 1.0
 	_temp_boost_mult = 1.0
@@ -342,8 +487,13 @@ func _apply_random_direction_offset(angle_min_deg: float, angle_max_deg: float) 
 
 func _recompute_speed() -> void:
 	var final_mult: float = max(_external_speed_mult * _temp_boost_mult, 0.01)
+	# FIX: Always compute from BASE speed to prevent exponential growth
 	move_speed = _base_move_speed * final_mult
 	weapon_rotate_speed = _base_weapon_rotate_speed * final_mult
+
+	# Safety clamp for move_speed property
+	if move_speed > MAX_SPEED:
+		move_speed = MAX_SPEED
 
 
 func set_team(new_team: int) -> void:
@@ -358,7 +508,24 @@ func _is_territory_owner_blocked(owner: int) -> bool:
 	return (owner >= 0 and owner != team_id) or (territory_blocks_neutral and is_neutral)
 
 
+# Kiem tra marble co dang nam trong vung lanh tho dich khong (KHONG qua immunity)
+# Dung rieng cho stuck detection de biet marble da tu giai thoat chua
+func _is_blocked_by_enemy_territory() -> bool:
+	if territory == null:
+		return false
+	if not territory.has_method("world_to_cell") or not territory.has_method("get_owner_cell"):
+		return false
+	var center_cell: Vector2i = territory.call("world_to_cell", global_position)
+	var owner: int = int(territory.call("get_owner_cell", center_cell.x, center_cell.y))
+	return _is_territory_owner_blocked(owner)
+
+
+
+
 func _is_position_blocked_by_territory(pos: Vector2) -> bool:
+	if _territory_immunity_left > 0.0:
+		return false
+
 	if territory == null:
 		return false
 	if not territory.has_method("world_to_cell") or not territory.has_method("get_owner_cell"):
@@ -370,7 +537,7 @@ func _is_position_blocked_by_territory(pos: Vector2) -> bool:
 	if _is_territory_owner_blocked(center_owner):
 		return true
 
-	var probe_radius: float = max(_base_core_radius * size_scale * 0.92, 1.0)
+	var probe_radius: float = _base_core_radius * size_scale
 	var probe_dirs: Array[Vector2] = [
 		Vector2.RIGHT,
 		Vector2.LEFT,
@@ -391,6 +558,153 @@ func _is_position_blocked_by_territory(pos: Vector2) -> bool:
 
 	return false
 
+func apply_sweep_hit(attacker_pos: Vector2) -> void:
+	# Cấp quyền miễn nhiễm tạm thời để không kẹt mép
+	_territory_immunity_left = 0.6
+	
+	# 1. Knockback (hất)
+	var dir := (global_position - attacker_pos)
+	if dir.length() < 0.001:
+		dir = Vector2.RIGHT
+	dir = dir.normalized()
+	
+	# Bật ra nhanh với lực lớn (ví dụ 600-800)
+	var knockback_strength: float = randf_range(600.0, 800.0)
+	_sweep_knockback_vel = dir * knockback_strength
+	
+	if _knockback_tween != null and _knockback_tween.is_valid():
+		_knockback_tween.kill()
+	_knockback_tween = create_tween()
+	_knockback_tween.set_trans(Tween.TRANS_CUBIC)
+	_knockback_tween.set_ease(Tween.EASE_OUT)
+	# Giảm tốc từ từ trong 0.4s
+	_knockback_tween.tween_property(self, "_sweep_knockback_vel", Vector2.ZERO, 0.4)
+
+	# 2. Spin nhỏ
+	if _sweep_spin_tween != null and _sweep_spin_tween.is_valid():
+		_sweep_spin_tween.kill()
+	
+	var spin_sign := 1.0 if randf() > 0.5 else -1.0
+	var spin_deg := randf_range(20.0, 60.0)
+	var spin_rad := deg_to_rad(spin_deg) * spin_sign
+	var spin_duration := randf_range(0.3, 0.5)
+	
+	if core_sprite:
+		_sweep_spin_tween = create_tween()
+		_sweep_spin_tween.set_trans(Tween.TRANS_QUAD)
+		_sweep_spin_tween.set_ease(Tween.EASE_OUT)
+		_sweep_spin_tween.tween_property(core_sprite, "rotation", core_sprite.rotation + spin_rad, spin_duration)
+
+	# 3. Squash and Stretch
+	_play_sweep_squash()
+
+	# 4. Weapon Pierce & Spin to clear out stuck territory
+	if weapon_pivot:
+		if _pierce_tween != null and _pierce_tween.is_valid():
+			_pierce_tween.kill()
+		_pierce_tween = create_tween()
+		_pierce_tween.set_trans(Tween.TRANS_QUAD)
+		_pierce_tween.set_ease(Tween.EASE_OUT)
+		# Spin super fast
+		var sweep_spin_dir := 1.0 if randf() > 0.5 else -1.0
+		_pierce_tween.tween_property(weapon_pivot, "rotation", weapon_pivot.rotation + PI * 3.0 * sweep_spin_dir, 0.4)
+	
+	# Boost capture power to guarantee clearing phantom colors
+	capture_power_mult = 10.0
+	if _power_tween != null and _power_tween.is_valid():
+		_power_tween.kill()
+	_power_tween = create_tween()
+	_power_tween.tween_property(self, "capture_power_mult", 1.0, 0.4)
+
+	# Pierce effect: visually extend the weapon
+	if weapon_sprite and weapon_shape and weapon_shape.shape is RectangleShape2D:
+		if _ws_tween != null and _ws_tween.is_valid():
+			_ws_tween.kill()
+		_ws_tween = create_tween()
+		_ws_tween.set_trans(Tween.TRANS_ELASTIC)
+		_ws_tween.set_ease(Tween.EASE_OUT)
+		
+		var cur_scale := weapon_sprite.scale
+		var tgt_scale := cur_scale
+		tgt_scale.x *= 1.8
+		
+		var rect_shape = weapon_shape.shape as RectangleShape2D
+		var cur_size: Vector2 = rect_shape.size
+		var tgt_size: Vector2 = cur_size
+		tgt_size.x *= 1.8
+		
+		_ws_tween.tween_property(weapon_sprite, "scale", tgt_scale, 0.1)
+		_ws_tween.parallel().tween_property(rect_shape, "size", tgt_size, 0.1)
+		
+		_ws_tween.tween_property(weapon_sprite, "scale", cur_scale, 0.3)
+		_ws_tween.parallel().tween_property(rect_shape, "size", cur_size, 0.3)
+
+func _play_sweep_squash() -> void:
+	if not is_inside_tree():
+		return
+	if _capture_squash_tween != null and _capture_squash_tween.is_valid():
+		_capture_squash_tween.kill()
+	# Stretch theo chiều hướng bị hất (nếu có_thể, mượn tạm cách uniform hoặc phi uniform)
+	_visual_scale_mult = Vector2(1.25, 0.75)  # squash & stretch mạnh hơn một chút
+	_capture_squash_tween = create_tween()
+	_capture_squash_tween.set_trans(Tween.TRANS_ELASTIC)
+	_capture_squash_tween.set_ease(Tween.EASE_OUT)
+	_capture_squash_tween.tween_property(self, "_visual_scale_mult", Vector2.ONE, 0.5)
+
+func _set_sos_state(on: bool) -> void:
+	_is_sos = on
+	if _sos_tween != null and _sos_tween.is_valid():
+		_sos_tween.kill()
+
+	if on:
+		_orig_label_text = skin_label.text
+		skin_label.text = "Help!"
+		skin_label.visible = true  # Đảm bảo hiện dù marble không có skin
+		skin_label.add_theme_color_override("font_color", Color.WHITE)
+		skin_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		skin_label.add_theme_constant_override("outline_size", 4)
+		
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color.RED
+		sb.content_margin_left = 8
+		sb.content_margin_right = 8
+		sb.content_margin_top = 2
+		sb.content_margin_bottom = 2
+		sb.set_corner_radius_all(4)
+		skin_label.add_theme_stylebox_override("normal", sb)
+		
+		skin_label.pivot_offset = skin_label.size * 0.5
+		
+		_sos_tween = create_tween().set_loops()
+		_sos_tween.tween_property(skin_label, "scale", Vector2(1.3, 1.3), 0.3).set_trans(Tween.TRANS_SINE)
+		_sos_tween.tween_property(skin_label, "scale", Vector2(1.0, 1.0), 0.3).set_trans(Tween.TRANS_SINE)
+		
+		# Boost capture power while stuck to help clear nearby territory
+		capture_power_mult = 5.0
+		
+		emit_signal("marble_stuck", self, global_position, team_id, true)
+	else:
+		skin_label.text = _orig_label_text
+		skin_label.remove_theme_color_override("font_color")
+		skin_label.remove_theme_color_override("font_outline_color")
+		skin_label.remove_theme_constant_override("outline_size")
+		skin_label.remove_theme_stylebox_override("normal")
+		skin_label.scale = Vector2.ONE
+		_update_skin_label_text()
+		
+		capture_power_mult = 1.0
+		
+		emit_signal("marble_stuck", self, global_position, team_id, false)
+
+func start_rescue(target_pos: Vector2, duration: float) -> void:
+	var dir := (target_pos - global_position)
+	if dir.length() > 0.1:
+		base_dir = dir.normalized()
+		_move_dir = base_dir
+		_rescue_timer = duration
+		# Also reset dir timer to prevent immediate change after rescue
+		_reset_dir_timer()
+		_wall_cooldown = duration * 0.5
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if not SIM_RUNNING:
@@ -399,7 +713,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		_has_safe_pos = true
 		return
 
-	var v := _desired_velocity
+	var v := _desired_velocity + _sweep_knockback_vel
 	# --- Territory block: chặn từ mép core, không cho tâm đi vào vùng cấm ---
 	if territory_block_enabled and territory != null and territory.has_method("world_to_cell") and territory.has_method("get_owner_cell"):
 		var pos: Vector2 = state.transform.origin
@@ -446,13 +760,17 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 			_move_dir = base_dir
 			_wall_cooldown = 0.25
 
-	if v.length() > move_speed:
-		v = v.normalized() * move_speed
+	# Limit final velocity based on current move_speed and safety constant
+	var current_max: float = max(move_speed + _sweep_knockback_vel.length(), 100.0)
+	current_max = min(current_max, MAX_SPEED)
+	
+	if v.length() > current_max:
+		v = v.normalized() * current_max
 
 	state.linear_velocity = v
+	_current_velocity = v
 
 
-# ✅ B-1 getter: dùng cho World tick paint theo tip
 func get_weapon_tip_global_pos() -> Vector2:
 	if weapon_tip != null:
 		return weapon_tip.global_position
@@ -487,6 +805,13 @@ func apply_size_scale() -> void:
 		core_sprite.scale = _base_core_sprite_scale * s
 	if weapon_sprite:
 		weapon_sprite.scale = _base_weapon_sprite_scale * s
+		
+	if core_shape:
+		core_shape.position = _base_core_pos * s
+	if weapon_pivot:
+		weapon_pivot.position = _base_weapon_pivot_pos * s
+		
+	_apply_visual_scale_multiplier()
 
 	_apply_no_tint_visuals()
 	_update_skin_label_position()
@@ -496,16 +821,22 @@ func _cache_base_from_scene_once() -> void:
 	if _cached_base:
 		return
 
-	var core_circle := core_shape.shape as CircleShape2D
-	if core_circle:
-		_base_core_radius = core_circle.radius
+	if core_shape:
+		var core_circle := core_shape.shape as CircleShape2D
+		if core_circle:
+			_base_core_radius = core_circle.radius
+		_base_core_pos = core_shape.position
 
-	var weapon_rect := weapon_shape.shape as RectangleShape2D
-	if weapon_rect:
-		_base_weapon_rect_size = weapon_rect.size
+	if weapon_shape:
+		var weapon_rect := weapon_shape.shape as RectangleShape2D
+		if weapon_rect:
+			_base_weapon_rect_size = weapon_rect.size
 
 	if weapon_area:
 		_base_weapon_offset = weapon_area.position
+		
+	if weapon_pivot:
+		_base_weapon_pivot_pos = weapon_pivot.position
 
 	if core_sprite:
 		_base_core_sprite_scale = core_sprite.scale
@@ -522,7 +853,45 @@ func _apply_no_tint_visuals() -> void:
 		weapon_sprite.modulate = Color.WHITE
 
 
-# ✅ FIX SKIN: Resource -> truy cập field trực tiếp (không dùng "in")
+func trigger_capture_squash() -> void:
+	_play_capture_squash()
+
+
+func _play_turn_squash() -> void:
+	if not is_inside_tree():
+		return
+	if _turn_squash_tween != null and _turn_squash_tween.is_valid():
+		_turn_squash_tween.kill()
+	var strength_ratio: float = clampf(squash_strength / 0.08, 0.0, 2.0)
+	var stretch: float = lerpf(1.0, 1.08, strength_ratio)
+	var squish: float = lerpf(1.0, 0.92, strength_ratio)
+	_visual_scale_mult = Vector2(stretch, squish)
+	_turn_squash_tween = create_tween()
+	_turn_squash_tween.set_trans(Tween.TRANS_QUAD)
+	_turn_squash_tween.set_ease(Tween.EASE_OUT)
+	_turn_squash_tween.tween_property(self, "_visual_scale_mult", Vector2.ONE, clamp(squash_time, 0.10, 0.16))
+
+
+func _play_capture_squash() -> void:
+	if not is_inside_tree():
+		return
+	if _capture_squash_tween != null and _capture_squash_tween.is_valid():
+		_capture_squash_tween.kill()
+	_visual_scale_mult = Vector2(1.06, 1.06)
+	_capture_squash_tween = create_tween()
+	_capture_squash_tween.set_trans(Tween.TRANS_BACK)
+	_capture_squash_tween.set_ease(Tween.EASE_OUT)
+	_capture_squash_tween.tween_property(self, "_visual_scale_mult", Vector2.ONE, clamp(squash_time * 0.8, 0.08, 0.12))
+
+
+func _apply_visual_scale_multiplier() -> void:
+	var s: float = size_scale
+	if core_sprite:
+		core_sprite.scale = _base_core_sprite_scale * s * _visual_scale_mult_value
+	if weapon_sprite:
+		weapon_sprite.scale = _base_weapon_sprite_scale * s * _visual_scale_mult_value
+
+
 func apply_skin(p_skin) -> void:
 	skin = p_skin
 	if skin == null:
@@ -549,6 +918,9 @@ func _reset_dir_timer() -> void:
 
 
 func _update_base_dir(delta: float) -> void:
+	if _rescue_timer > 0.0:
+		return
+	
 	_dir_timer -= delta
 	if _dir_timer > 0.0:
 		return
@@ -573,9 +945,12 @@ func _compute_bias_dir() -> Vector2:
 
 	var sum := Vector2.ZERO
 	var count := 0
+	
+	var radius: int = sample_radius_cells
+	var b_strength: float = bias_strength
 
-	for dy in range(-sample_radius_cells, sample_radius_cells + 1):
-		for dx in range(-sample_radius_cells, sample_radius_cells + 1):
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
 			if dx == 0 and dy == 0:
 				continue
 
@@ -583,7 +958,7 @@ func _compute_bias_dir() -> Vector2:
 			var cy := cell.y + dy
 
 			var cell_owner: int = int(territory.call("get_owner_cell", cx, cy))
-			if cell_owner != team_id:
+			if cell_owner != team_id and cell_owner != -999: # -999 is OWNER_OOB
 				var world_pos: Vector2 = territory.call("cell_to_world", Vector2i(cx, cy))
 				var cs: float = float(App.config.grid_cell_size) if App.config != null else 16.0
 				var center: Vector2 = world_pos + Vector2(cs * 0.5, cs * 0.5)
